@@ -13,6 +13,7 @@ fi
 echo "Inception: Waiting for MariaDB to be ready..."
 until mysqladmin ping \
 		-h"${WORDPRESS_DB_HOST%%:*}" \
+		-P"${WORDPRESS_DB_HOST##*:}" \
 		-u"$WORDPRESS_DB_USER" \
 		-p"$WORDPRESS_DB_PASSWORD" \
 		--silent; do

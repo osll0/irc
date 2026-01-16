@@ -35,7 +35,4 @@ RUN chmod +x /usr/local/bin/wp-docker-entrypoint.sh
 
 ENTRYPOINT [ "/usr/local/bin/wp-docker-entrypoint.sh" ]
 
-# Nginx 컨테이너랑 통신
-EXPOSE 9000
-
 CMD [ "/usr/sbin/php-fpm81", "-F" ]
