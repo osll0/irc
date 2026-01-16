@@ -1,0 +1,56 @@
+services:
+  mariadb:
+    build: ./requirements/mariadb
+    container_name: mydb
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    restart: always
+    env_file: .env
+    networks:
+      - inception
+
+  wordpress:
+    build: ./requirements/wordpress
+    container_name: mywp
+    depends_on:
+      - mariadb
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - inception
+    env_file: .env
+    restart: always
+
+  nginx:
+    build: ./requirements/nginx
+    container_name: mynginx
+    depends_on:
+      - wordpress
+    ports:
+      - 443:443
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - inception
+    env_file:
+      - .env
+    restart: always
+
+volumes:
+  mariadb_data:
+    driver: local # 로컬 스토리지 드라이버 사용
+    driver_opts:
+      type: none # 특정 파일시스템 타입 없음
+      o: bind # bind mount 옵션?
+      device: /home/${USER}/data/mariadb # 실제 호스트 경로
+
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/${USER}/data/wordpress
+
+networks:
+  inception:
+    driver: bridge
