@@ -1,7 +1,0 @@
-# Environment variables
-.env
-srcs/.env
-
-# IDE
-.vscode/
-.idea/
