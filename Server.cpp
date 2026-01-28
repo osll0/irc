@@ -1,16 +1,30 @@
 #include "Server.hpp"
 #include <iostream>
 #include <string>
+#include <cstring>
 #include <cerrno>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <csignal>
+
+extern volatile sig_atomic_t g_running;
 
 Server::Server(const char* port, const char* password): listener(-1),  port(port), password(password), cmdHandler(nicknames, *this) {}
 
-Server::~Server() {}
+Server::~Server()
+{
+	// 모든 클라이언트 소켓 닫기
+	for (std::map<int, Client>::iterator it = clients.begin(); it != clients.end(); ++it) {
+		Client client = it->second;
+		close(client.getFd());
+	}
+	// 리스너 소켓 닫기
+	if (listener != -1)
+		close(listener);
+}
 
 int		Server::getListenerSocket()
 {
@@ -20,8 +34,8 @@ int		Server::getListenerSocket()
 	struct addrinfo hints, *res, *p;
 
 	memset(&hints, 0, sizeof hints);
-	hints.ai_family = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_family = AF_UNSPEC;	// IPv4, IPv6 둘 다 호환
+	hints.ai_socktype = SOCK_STREAM;	// TCP
 	hints.ai_flags = AI_PASSIVE;
 
 	if ((rv = getaddrinfo(NULL, port, &hints, &res)) != 0) {
@@ -36,6 +50,7 @@ int		Server::getListenerSocket()
 			continue;
 		}
 
+		// 서버 재시작 시, "이미 사용 중"으로 열리지 않는 상황 방지
 		if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 			std::cerr << "setsockopt: " << strerror(errno) << std::endl;
 			close(listener);
@@ -53,8 +68,12 @@ int		Server::getListenerSocket()
 
 	if (p == NULL)
 		return -1;
-	if (listen(listener, BACKLOG) == -1)
+	
+	// 연결 요청을 listener에 담아둠, BACKLOG는 몇개의 요청까지 저장해둘지
+	if (listen(listener, BACKLOG) == -1) {
+		close(listener);
 		return -1;
+	}
 	return listener;
 }
 
@@ -74,11 +93,37 @@ int		Server::makeSocketNonblocking(int fd)
 	return 0;
 }
 
+bool	Server::initialize()
+{
+	listener = getListenerSocket();
+	if (listener == -1) {
+		std::cerr << "Failed to create listener socket" << std::endl;
+		return false;
+	}
+
+	// recv()에서 \r\n 없는 메시지를 보냈을 때, 해당 메시지가 완성될 때까지 해당 클라이언트에서 서버가 멈춰서 기다리지 않게 하는 설정
+	if (makeSocketNonblocking(listener) == -1) {
+		close(listener);
+		return false;
+	}
+
+	pollfd server_pollfd;
+	server_pollfd.fd = listener;
+	server_pollfd.events = POLLIN;
+	server_pollfd.revents = 0;
+	fds.push_back(server_pollfd);
+	
+	std::cout << "Server listening on port " << port << std::endl;
+	return true;
+}
+
 void	Server::handleNewConnection()
 {
 	struct sockaddr_storage client_addr;
 	socklen_t client_len = sizeof(client_addr);
 
+	// listener에 들어온 연결 요청을 accept로 연결해줌.
+	// new_fd가 recv/send할 소켓 디스크립터.
 	int new_fd = accept(listener, (struct sockaddr *)&client_addr, &client_len);
 	if (new_fd < 0) {
 		std::cerr << "accept: " << strerror(errno) << std::endl;
@@ -98,6 +143,14 @@ void	Server::handleNewConnection()
 
 	clients[new_fd] = Client(new_fd);
 	std::cout << "New client connected: fd " << new_fd << std::endl;
+}
+
+void	Server::processMessage(Client& client, const std::string& message)
+{
+	std::cout << "Received from fd " << client.getFd() << ": " << message << std::endl;
+
+	Message msg(message);
+	cmdHandler.handleCommand(client, msg);
 }
 
 bool	Server::handleClientEvent(size_t index)
@@ -137,14 +190,44 @@ bool	Server::handleClientEvent(size_t index)
 	return true;
 }
 
-
-void	Server::processMessage(Client& client, const std::string& message)
+void	Server::run()
 {
-	std::cout << "Received from fd " << client.getFd() << ": " << message << std::endl;
+	while (g_running) {
+		std::cout << "Wating for events... (monitoring " << fds.size() << " fds)" << std::endl;
 
-	Message msg(message);
-	cmdHandler.handleCommand(client, msg);
+		int poll_count = poll(&fds[0], fds.size(), -1);
+		if (poll_count < 0) {
+			std::cerr << "poll: " << strerror(errno) << std::endl;
+			break;
+		}
+
+		std::cout << "Events detected on " << poll_count << " fd(s)" << std::endl;
+
+		for (size_t i = 0, found = 0; i < fds.size() && found < (size_t)poll_count; ++i) {
+			if (fds[i].revents == 0)
+				continue;
+			found++;
+
+			if (fds[i].fd == listener) {
+				handleNewConnection();
+			} else {
+				bool exists = handleClientEvent(i);
+				if (!exists)
+					--i;
+			}
+		}
+	}
+
+	// 종료 메시지
+	std::map<int, Client>::iterator it;
+	for (it = clients.begin(); it != clients.end(); ++it) {
+		int fd = it->first;
+		std::string msg = "Server shutting down\n";
+		send(fd, msg.c_str(), msg.size(), 0);
+	}
 }
+
+
 
 // Channel management
 Channel* Server::getChannel(const std::string& channel_name)
@@ -233,65 +316,20 @@ void	Server::closeClient(size_t index)
 
 	if (!client.getNickname().empty())
 		nicknames.erase(client.getNickname());
-	
+
+	// 채널에서 client_fd 삭제
+	std::map<std::string, Channel>::iterator it;
+	for (it = channels.begin(); it != channels.end(); ++it) {
+		Channel& ch = it->second;
+		if (ch.hasMember(client_fd))
+			ch.removeMember(client_fd);
+	}
+
 	close(client_fd);
 	clients.erase(client_fd);
 	fds.erase(fds.begin() + index);
 
 	std::cout << "Client fd " << client_fd << " closed" << std::endl;
-}
-
-
-bool	Server::initialize()
-{
-	listener = getListenerSocket();
-	if (listener == -1) {
-		std::cerr << "Failed to create listener socket" << std::endl;
-		return false;
-	}
-
-	if (makeSocketNonblocking(listener) == -1) {
-		close(listener);
-		return false;
-	}
-
-	pollfd server_pollfd;
-	server_pollfd.fd = listener;
-	server_pollfd.events = POLLIN;
-	server_pollfd.revents = 0;
-	fds.push_back(server_pollfd);
-	
-	std::cout << "Server listening on port " << port << std::endl;
-	return true;
-}
-
-void	Server::run()
-{
-	while (true) {
-		std::cout << "Wating for events... (monitoring " << fds.size() << " fds)" << std::endl;
-
-		int poll_count = poll(&fds[0], fds.size(), -1);
-		if (poll_count < 0) {
-			std::cerr << "poll: " << strerror(errno) << std::endl;
-			break;
-		}
-
-		std::cout << "Events detected on " << poll_count << " fd(s)" << std::endl;
-
-		for (size_t i = 0, found = 0; i < fds.size() && found < (size_t)poll_count; ++i) {
-			if (fds[i].revents == 0)
-				continue;
-			found++;
-
-			if (fds[i].fd == listener) {
-				handleNewConnection();
-			} else {
-				bool exists = handleClientEvent(i);
-				if (!exists)
-					--i;
-			}
-		}
-	}
 }
 
 const std::string& Server::getPassword() const

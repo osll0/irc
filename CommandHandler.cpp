@@ -149,7 +149,6 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 	if (ch->hasMember(client.getFd()))
 		return ;
 	// 참가 가능 여부 확인 (mode 확인)
-	std::cout << "Debug: canJoin start" << std::endl;
 	if (!ch->canJoin(client.getFd(), key)) {
 		if (ch->is_InviteOnly() && !ch->is_Invited(client.getFd()))
 			client.send_reply(ERR_INVITEONLYCHAN, channel_name + " :Cannot join channel (+i)");
@@ -159,7 +158,6 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 			client.send_reply(ERR_BADCHANNELKEY, channel_name + " :Cannot join channel (+k)");
 		return ;
 	}
-	std::cout << "Debug: canJoin end" << std::endl;
 
 	// 채널에 추가
 	ch->addMember(client.getFd());
@@ -322,6 +320,7 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 	server.sendToClient(target->getFd(), kick_msg);
 	server.broadcastToChannel(channel_name, kick_msg, target->getFd());
 	// 대상을 채널에서 제거
+	
 	ch->removeMember(target->getFd());
 	// 채널 비어있으면 채널 제거
 	server.removeChannel(channel_name);

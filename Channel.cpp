@@ -36,6 +36,11 @@ void	Channel::addOperator(int client_fd)
 void	Channel::removeOperator(int client_fd)
 {
 	channel_operators_.erase(client_fd);
+	// 만약 오퍼레이터가 하나도 없다면?
+	if (channel_operators_.size() == 0) {
+		std::set<int>::iterator it = channel_members_.begin();
+		addOperator(*it);
+	}
 }
 
 bool	Channel::isOperator(int client_fd) const
