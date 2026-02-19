@@ -343,8 +343,8 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 		client.send_reply(ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
 		return ;
 	}
-	//
-	std::string channel_name = msg.getParams()[1];
+
+	std::string channel_name = msg.getParams()[0];
 
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
@@ -376,7 +376,7 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 		}
 	}
 	ch->setTopic(change_topic);
-	std::string topic_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost TOPIC " + channel_name + ":" + change_topic + "\r\n";
+	std::string topic_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost TOPIC " + channel_name + " :" + change_topic + "\r\n";
 
 	server.sendToClient(client.getFd(), topic_msg);
 	server.broadcastToChannel(channel_name, topic_msg, client.getFd());
