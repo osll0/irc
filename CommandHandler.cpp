@@ -655,21 +655,21 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	}
 }
 
-// ex) PING :lagtimer
 void	CommandHandler::handlePing(Client& client, const Message& msg)
 {
-	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
-		return;
-	}
-	if (msg.getParams().size() < 1) {
-		client.send_reply(ERR_NOORIGIN, ":No origin specified");
+	// 파라미터가 하나도 없는 경우
+	if (msg.getParams().empty()) {
+		client.send_reply(ERR_NOORIGIN, client.getNickname() + " :No origin specified");
 		return ;
 	}
 
+	// PONG 응답 전송
+	// PING에서 받는 토큰 그대로 포함
 	std::string token = msg.getParams()[0];
-	std::string pong_msg = "PONG :" + token + "\r\n";
-	server.sendToClient(client.getFd(), pong_msg);
+
+	// 형식:    :<servername> PONG <servername> :<token>
+	std::string pong_reply = ":localhost PONG localhost :" + token + "\r\n";
+	client.appendWriteBuffer(pong_reply);
 }
 
 // QUIT :nick

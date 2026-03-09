@@ -49,7 +49,7 @@ const std::string RPL_INVITING = "341";
 const std::string RPL_CHANNELMODEIS = "324";
 const std::string ERR_UNKNOWNMODE = "472";
 const std::string ERR_KEYSET = "467";
-//pong
+//ping
 const std::string ERR_NOORIGIN = "409";
 const std::string ERR_NOSUCHSERVER = "402";
 
@@ -73,9 +73,9 @@ class CommandHandler {
 		void	handleTopic(Client& client, const Message& msg);
 		void	handleInvite(Client& client, const Message& msg);
 		void	handleMode(Client& client, const Message& msg);
-		void	applyMode(Client& client, const std::vector<std::string>& params, Channel* ch);
 		void	handlePing(Client& client, const Message& msg);
 		void	handleQuit(Client& client, const Message& msg);
+		void	applyMode(Client& client, const std::vector<std::string>& params, Channel* ch);
 
 		void	sendWelcome(Client& client);
 
