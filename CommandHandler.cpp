@@ -710,6 +710,20 @@ void	CommandHandler::handlePing(Client& client, const Message& msg)
 	client.appendWriteBuffer(pong_reply);
 }
 
+void	CommandHandler::handleQuit(Client& client, const Message& msg)
+{
+	std::string reason = "Client Quit";
+	if (!msg.getParams().empty()) {
+		reason = msg.getParams()[0];
+	}
+
+	std::string quit_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost QUIT :" + reason + "\r\n";
+	server.quitFromAllChannels(client.getFd(), quit_msg);
+
+	std::string error_msg = "ERROR :Closing Link: localhost (" + reason + ")\r\n";
+	client.appendWriteBuffer(error_msg);
+}
+
 void	CommandHandler::registerCommands()
 {
 	commands["PASS"] = &CommandHandler::handlePass;
@@ -723,6 +737,7 @@ void	CommandHandler::registerCommands()
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
 	commands["PING"] = &CommandHandler::handlePing;
+	commands["QUIT"] = &CommandHandler::handleQuit;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)
