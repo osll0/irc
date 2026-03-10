@@ -656,6 +656,22 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	}
 }
 
+void	CommandHandler::handleCap(Client& client, const Message& msg)
+{
+	if (msg.getParams().empty())
+		return ;
+
+	std::string subCommand = msg.getParams()[0];
+
+	if (subCommand == "LS") {
+		std::string reply = ":localhost CAP * LS :\r\n";
+		server.sendToClient(client.getFd(), reply);
+	} else if (subCommand == "END") {
+		if (client.is_registered()) {
+			sendWelcome(client);
+		}
+	}
+}
 
 void	CommandHandler::registerCommands()
 {
@@ -669,6 +685,7 @@ void	CommandHandler::registerCommands()
 	commands["TOPIC"] = &CommandHandler::handleTopic;
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
+	commands["CAP"] = &CommandHandler::handleCap;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)
