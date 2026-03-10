@@ -656,6 +656,22 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	}
 }
 
+void	CommandHandler::handlePing(Client& client, const Message& msg)
+{
+	// 파라미터가 하나도 없는 경우
+	if (msg.getParams().empty()) {
+		client.send_reply(ERR_NOORIGIN, client.getNickname() + " :No origin specified");
+		return ;
+	}
+
+	// PONG 응답 전송
+	// PING에서 받는 토큰 그대로 포함
+	std::string token = msg.getParams()[0];
+
+	// 형식:    :<servername> PONG <servername> :<token>
+	std::string pong_reply = ":localhost PONG localhost :" + token + "\r\n";
+	client.appendWriteBuffer(pong_reply);
+}
 
 void	CommandHandler::registerCommands()
 {
@@ -669,6 +685,7 @@ void	CommandHandler::registerCommands()
 	commands["TOPIC"] = &CommandHandler::handleTopic;
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
+	commands["PING"] = &CommandHandler::handlePing;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)
