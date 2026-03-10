@@ -39,8 +39,11 @@ void	Channel::removeOperator(int client_fd)
 	channel_operators_.erase(client_fd);
 
 	if (channel_operators_.size() == 0) {
-		std::set<int>::iterator it = channel_members_.begin();
-		addOperator(*it);
+		// 채널에 사람이 남아있을 때만 위임
+		if (!channel_members_.empty()) {
+			std::set<int>::iterator it = channel_members_.begin();
+			addOperator(*it);
+		}
 	}
 }
 

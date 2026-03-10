@@ -2,6 +2,20 @@
 #include "Server.hpp"
 #include <iostream>
 #include <stdlib.h>
+#include <sstream>
+
+static std::vector<std::string> split(const std::string &str, char delimiter) {
+	std::vector<std::string> tokens;
+	std::string token;
+	std::istringstream tokenStream(str);
+
+	while (std::getline(tokenStream, token, delimiter)) {
+		if (!token.empty()) {
+			tokens.push_back(token);
+		}
+	}
+	return tokens;
+}
 
 CommandHandler::CommandHandler(std::map<std::string, int>& nicknames, Server& server):server(server), nicknames(nicknames)
 {
@@ -242,12 +256,13 @@ void	CommandHandler::handlePart(Client& client, const Message& msg)
 		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
 		return;
 	}
-	if (msg.getParams().empty()) {
+	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
 		client.send_reply(ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
 		return ;
 	}
 
-	std::string channel_name = msg.getParams()[0];
+	std::vector<std::string> channels = split(msg.getParams()[0], ',');
+
 	std::string leave_msg;
 	if (msg.getParams().size() > 1) {
 		leave_msg = msg.getParams()[1];
@@ -255,22 +270,44 @@ void	CommandHandler::handlePart(Client& client, const Message& msg)
 		leave_msg = client.getNickname();
 	}
 
-	Channel* ch = server.getChannel(channel_name);
-	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
-		return ;
+	for (size_t i = 0; i < channels.size(); ++i) {
+		std::string channel_name = channels[i];
+		Channel* ch = server.getChannel(channel_name);
+
+		if (!ch) {
+			client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+			continue ;
+		}
+		if (!ch->hasMember(client.getFd())) {
+			client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+			continue ;
+		} 
+
+		std::string part_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost PART " + channel_name + " :" + leave_msg + "\r\n";
+
+		server.sendToClient(client.getFd(), part_msg);
+		server.broadcastToChannel(channel_name, part_msg, client.getFd());
+
+		bool was_operator = ch->isOperator(client.getFd());
+		ch->removeMember(client.getFd());
+
+		if (ch->getMembers().empty()) {
+			server.removeChannel(channel_name);
+		} else {
+			if (was_operator && ch->getOperators().empty()) {
+				int new_op_fd = *(ch->getMembers().begin());
+				ch->addOperator(new_op_fd);
+
+				Client *new_op_client = server.getClientByFd(new_op_fd);
+				if (new_op_client) {
+					std::string mode_msg = ":localhost MODE " + channel_name + " +o " + new_op_client->getNickname() + "\r\n";
+					server.broadcastToChannel(channel_name, mode_msg, -1);
+				}
+			}
+		}
 	}
-	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
-		return ;
-	} 
-	std::string part_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost PART " + channel_name + ":" + leave_msg + "\r\n";
 
-	server.sendToClient(client.getFd(), part_msg);
-	server.broadcastToChannel(channel_name, part_msg, client.getFd());
 
-	ch->removeMember(client.getFd());
-	server.removeChannel(channel_name);
 }
 
 // KICK <channel> *("," <channel> ) <user> *("," <user> ) [<comment>]
