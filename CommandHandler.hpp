@@ -76,6 +76,7 @@ class CommandHandler {
 		void	handleMode(Client& client, const Message& msg);
 		void	handlePing(Client& client, const Message& msg);
 		void	handleQuit(Client& client, const Message& msg);
+		void	handleCap(Client& client, const Message& msg);
 		void	applyMode(Client& client, const std::vector<std::string>& params, Channel* ch);
 
 		void	sendWelcome(Client& client);
