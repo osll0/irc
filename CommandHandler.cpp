@@ -127,7 +127,8 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 	}
 
 	// 파라미터 확인
-	if (msg.getParams().empty()) {
+	// join :로 들어온 경우 빈 문자열로 파싱되므로 에러 조건 추가
+	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
 		client.send_reply(ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
 		return ;
 	}
@@ -137,7 +138,7 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 		key = msg.getParams()[1];
 	}
 	// 채널 이름 검증 (# 또는 &로 시작)
-	if (channel_name.empty() || (channel_name[0] != '#' && channel_name[0] != '&')) {
+	if (channel_name[0] != '#' && channel_name[0] != '&') {
 		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
 		return ;
 	}
@@ -344,12 +345,12 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 		return;
 	}
 
-	if (msg.getParams().empty()) {
+	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
 		client.send_reply(ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
 		return ;
 	}
-	//
-	std::string channel_name = msg.getParams()[1];
+
+	std::string channel_name = msg.getParams()[0];
 
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
@@ -381,7 +382,7 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 		}
 	}
 	ch->setTopic(change_topic);
-	std::string topic_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost TOPIC " + channel_name + ":" + change_topic + "\r\n";
+	std::string topic_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost TOPIC " + channel_name + " :" + change_topic + "\r\n";
 
 	server.sendToClient(client.getFd(), topic_msg);
 	server.broadcastToChannel(channel_name, topic_msg, client.getFd());
@@ -402,7 +403,7 @@ void	CommandHandler::handleInvite(Client& client, const Message& msg)
 	}
 
 	if (msg.getParams().size() < 2) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, "INVITE :Not enough parameters");
 		return ;
 	}
 	std::string target_nick = msg.getParams()[0];
@@ -470,7 +471,7 @@ void	CommandHandler::handleMode(Client& client, const Message& msg)
 		return;
 	}
 	if (msg.getParams().size() < 2) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
 		return ;
 	}
 
