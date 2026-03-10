@@ -136,7 +136,7 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 {
 	if (!client.is_registered()) {
 		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
-		return;
+		return ;
 	}
 
 	// 파라미터 확인
@@ -145,66 +145,79 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 		client.send_reply(ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
 		return ;
 	}
-	std::string channel_name = msg.getParams()[0];
-	std::string key;
+
+	std::vector<std::string> channels = split(msg.getParams()[0], ',');
+	std::vector<std::string> keys;
 	if (msg.getParams().size() > 1) {
-		key = msg.getParams()[1];
-	}
-	// 채널 이름 검증 (# 또는 &로 시작)
-	if (channel_name[0] != '#' && channel_name[0] != '&') {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
-		return ;
-	}
-	// 채널 가져오기 또는 생성
-	Channel* ch = server.getChannel(channel_name);
-	if (!ch)
-		ch = server.createChannel(channel_name);
-	// 이미 멤버인지 확인 - 이미 멤버라면 무시
-	if (ch->hasMember(client.getFd()))
-		return ;
-	// 참가 가능 여부 확인 (mode 확인)
-	if (!ch->canJoin(client.getFd(), key)) {
-		if (ch->is_InviteOnly() && !ch->is_Invited(client.getFd()))
-			client.send_reply(ERR_INVITEONLYCHAN, channel_name + " :Cannot join channel (+i)");
-		else if (ch->getUserLimit() > 0 && ch->getMembers().size() >= (size_t)ch->getUserLimit())
-			client.send_reply(ERR_CHANNELISFULL, channel_name + " :Cannot join channel (+l)");
-		else if (!ch->getKey().empty() && ch->getKey() != key)
-			client.send_reply(ERR_BADCHANNELKEY, channel_name + " :Cannot join channel (+k)");
-		return ;
+		keys = split(msg.getParams()[1], ',');
 	}
 
-	// 채널에 추가
-	ch->addMember(client.getFd());
-	ch->removeInvite(client.getFd());
-	// JOIN 메시지 브로드캐스트 (본인 포함)
-	std::string join_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost JOIN " + channel_name + "\r\n";
-	client.appendWriteBuffer(join_msg);
-	// 다른 멤버에게도 전송
-	server.broadcastToChannel(channel_name, join_msg, client.getFd());
-	// Names 목록 전송
-	std::string name_list;
-	const std::set<int>& members = ch->getMembers();
-    for (std::set<int>::const_iterator it = members.begin(); it != members.end(); ++it) {
-        Client* member = server.getClientByFd(*it);
-        if (member) {
-            if (!name_list.empty()) {
-                name_list += " ";
-            }
-            // 오퍼레이터면 @ 붙이기
-            if (ch->isOperator(*it)) {
-                name_list += "@";
-            }
-            name_list += member->getNickname();
-        }
-    }
+	// 각 채널별 루프
+	for (size_t i = 0; i < channels.size(); ++i) {
+		std::string channel_name = channels[i];
+		std::string key = (i < keys.size()) ? keys[i] : "";
 
-	if (ch->getChannelTopic().empty()) {
-		client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " No topic is set");
-	} else {
-		client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + ch->getChannelTopic());
+		// 채널 이름 검증 (# 또는 &로 시작)
+		if (channel_name.empty() || (channel_name[0] != '#' && channel_name[0] != '&')) {
+			client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+			continue ;
+		}
+
+		// 채널 가져오기 또는 생성
+		Channel* ch = server.getChannel(channel_name);
+		if (!ch)
+			ch = server.createChannel(channel_name);
+
+		// 이미 멤버인지 확인 - 이미 멤버라면 무시 후 다음 채널
+		if (ch->hasMember(client.getFd()))
+			continue ;
+
+		// 참가 가능 여부 확인 (mode 확인)
+		if (!ch->canJoin(client.getFd(), key)) {
+			if (ch->is_InviteOnly() && !ch->is_Invited(client.getFd()))
+				client.send_reply(ERR_INVITEONLYCHAN, channel_name + " :Cannot join channel (+i)");
+			else if (ch->getUserLimit() > 0 && ch->getMembers().size() >= (size_t)ch->getUserLimit())
+				client.send_reply(ERR_CHANNELISFULL, channel_name + " :Cannot join channel (+l)");
+			else if (!ch->getKey().empty() && ch->getKey() != key)
+				client.send_reply(ERR_BADCHANNELKEY, channel_name + " :Cannot join channel (+k)");
+			continue ;
+		}
+
+		// 채널에 추가 (addMember 내부에서 Operator 처리)
+		ch->addMember(client.getFd());
+		ch->removeInvite(client.getFd());
+
+		// JOIN 메시지 전송: 본인(sendToClient), 다른 멤버(broadcastToChannel)
+		std::string join_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost JOIN " + channel_name + "\r\n";
+		server.sendToClient(client.getFd(), join_msg);
+		server.broadcastToChannel(channel_name, join_msg, client.getFd());
+
+		// Topic 응답
+		if (ch->getChannelTopic().empty()) {
+			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " No topic is set");
+		} else {
+			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + ch->getChannelTopic());
+		}
+
+		// Names 목록 전송
+		std::string name_list;
+		const std::set<int>& members = ch->getMembers();
+		for (std::set<int>::const_iterator it = members.begin(); it != members.end(); ++it) {
+			Client* member = server.getClientByFd(*it);
+			if (member) {
+				if (!name_list.empty()) {
+					name_list += " ";
+				}
+				// 오퍼레이터면 @ 붙이기
+				if (ch->isOperator(*it)) {
+					name_list += "@";
+				}
+				name_list += member->getNickname();
+			}
+		}
+		client.send_reply(RPL_NAMREPLY, client.getNickname() + " = " + channel_name + " :" + name_list);
+		client.send_reply(RPL_ENDOFNAMES, client.getNickname() + " " + channel_name + " :End of /NAMES list");
 	}
-	client.send_reply(RPL_NAMREPLY, client.getNickname() + " = " + channel_name + " :" + name_list);
-	client.send_reply(RPL_ENDOFNAMES, client.getNickname() + " " + channel_name + " :End of /NAMES list");
 }
 
 void	CommandHandler::handlePrivmsg(Client& client, const Message& msg)
@@ -306,8 +319,6 @@ void	CommandHandler::handlePart(Client& client, const Message& msg)
 			}
 		}
 	}
-
-
 }
 
 // KICK <channel> *("," <channel> ) <user> *("," <user> ) [<comment>]
@@ -706,7 +717,7 @@ void	CommandHandler::handlePing(Client& client, const Message& msg)
 
 	// 형식:    :<servername> PONG <servername> :<token>
 	std::string pong_reply = ":localhost PONG localhost :" + token + "\r\n";
-	client.appendWriteBuffer(pong_reply);
+	server.sendToClient(client.getFd(), pong_reply);
 }
 
 // QUIT :nick
