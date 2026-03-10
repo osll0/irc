@@ -43,6 +43,7 @@ class Server {
 		Channel* getChannel(const std::string& channel_name);
 		Channel* createChannel(const std::string& channel_name);
 		void	removeChannel(const std::string& channel_name);
+		void	quitFromAllChannels(int fd, const std::string &quit_msg);
 
 		void	enablePollout(int fd);
 		void	sendToClient(int fd, const std::string& message);

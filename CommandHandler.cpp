@@ -650,6 +650,19 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	}
 }
 
+void	CommandHandler::handleQuit(Client& client, const Message& msg)
+{
+	std::string reason = "Client Quit";
+	if (!msg.getParams().empty()) {
+		reason = msg.getParams()[0];
+	}
+
+	std::string quit_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost QUIT :" + reason + "\r\n";
+	server.quitFromAllChannels(client.getFd(), quit_msg);
+
+	std::string error_msg = "ERROR :Closing Link: localhost (" + reason + ")\r\n";
+	client.appendWriteBuffer(error_msg);
+}
 
 void	CommandHandler::registerCommands()
 {
@@ -663,6 +676,7 @@ void	CommandHandler::registerCommands()
 	commands["TOPIC"] = &CommandHandler::handleTopic;
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
+	commands["QUIT"] = &CommandHandler::handleQuit;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)

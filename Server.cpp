@@ -309,21 +309,54 @@ Client* Server::getClientByNickname(const std::string& nickname)
 	return NULL;
 }
 
+// 모든 채널을 순회하며 채널을 퇴장함
+// - 다른 유저에게 QUIT 브로드캐스트
+// - 방장인 경우 방장 위임
+void	Server::quitFromAllChannels(int fd, const std::string &quit_msg)
+{
+	std::vector<std::string> empty_channels;
+	std::map<std::string, Channel>::iterator it;
+
+	for (it = channels.begin(); it != channels.end(); ++it) {
+		Channel& ch = it->second;
+		if (ch.hasMember(fd)) {
+			broadcastToChannel(ch.getChannelName(), quit_msg, fd);
+
+			bool was_operator = ch.isOperator(fd);
+			ch.removeMember(fd);
+
+			if (ch.getMembers().empty()) {
+				empty_channels.push_back(ch.getChannelName());
+			} else {
+				if (was_operator && ch.getOperators().empty()) {
+					int new_op_fd = *(ch.getMembers().begin());
+					ch.addOperator(new_op_fd);
+
+					Client *new_op_client = getClientByFd(new_op_fd);
+					if (new_op_client) {
+						std::string mode_msg = ":localhost MODE " + ch.getChannelName() + " +o " + new_op_client->getNickname() + "\r\n";
+						broadcastToChannel(ch.getChannelName(), mode_msg, -1);
+					}
+				}
+			}
+		}
+	}
+	for (size_t i = 0; i < empty_channels.size(); ++i) {
+		removeChannel(empty_channels[i]);
+	}
+}
+
 void	Server::closeClient(size_t index)
 {
 	int client_fd = fds[index].fd;
 	Client& client = clients[client_fd];
 
+	// 비정상 종료 시 기본 전송될 QUIT 메시지
+	std::string quit_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost QUIT :Client exited\r\n";
+	quitFromAllChannels(client_fd, quit_msg);
+
 	if (!client.getNickname().empty())
 		nicknames.erase(client.getNickname());
-
-	// 채널에서 client_fd 삭제
-	std::map<std::string, Channel>::iterator it;
-	for (it = channels.begin(); it != channels.end(); ++it) {
-		Channel& ch = it->second;
-		if (ch.hasMember(client_fd))
-			ch.removeMember(client_fd);
-	}
 
 	close(client_fd);
 	clients.erase(client_fd);
