@@ -115,6 +115,9 @@ const std::string	Channel::getMode() const
 		modes += "l";
 		std::ostringstream os;
 		os << user_limit;
+		// 파라미터 이미 존재한다면 공백으로 구분
+		if (!params.empty())
+			params += " ";
 		params += os.str();
 	}
 	std::string result = modes + " " + params;
