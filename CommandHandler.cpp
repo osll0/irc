@@ -195,9 +195,9 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 
 		// Topic 응답
 		if (ch->getChannelTopic().empty()) {
-			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " No topic is set");
+			client.send_reply(RPL_NOTOPIC, channel_name + " :No topic is set");
 		} else {
-			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, channel_name + " :" + ch->getChannelTopic());
 		}
 
 		// Names 목록 전송
