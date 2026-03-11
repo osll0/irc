@@ -735,6 +735,23 @@ void	CommandHandler::handleQuit(Client& client, const Message& msg)
 	client.appendWriteBuffer(error_msg);
 }
 
+void	CommandHandler::handleCap(Client& client, const Message& msg)
+{
+	if (msg.getParams().empty())
+		return ;
+
+	std::string subCommand = msg.getParams()[0];
+
+	if (subCommand == "LS") {
+		std::string reply = ":localhost CAP * LS :\r\n";
+		server.sendToClient(client.getFd(), reply);
+	} else if (subCommand == "END") {
+		if (client.is_registered()) {
+			sendWelcome(client);
+		}
+	}
+}
+
 void	CommandHandler::registerCommands()
 {
 	commands["PASS"] = &CommandHandler::handlePass;
@@ -749,6 +766,7 @@ void	CommandHandler::registerCommands()
 	commands["MODE"] = &CommandHandler::handleMode;
 	commands["PING"] = &CommandHandler::handlePing;
 	commands["QUIT"] = &CommandHandler::handleQuit;
+	commands["CAP"] = &CommandHandler::handleCap;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)
