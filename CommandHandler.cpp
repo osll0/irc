@@ -175,11 +175,11 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 		// 참가 가능 여부 확인 (mode 확인)
 		if (!ch->canJoin(client.getFd(), key)) {
 			if (ch->is_InviteOnly() && !ch->is_Invited(client.getFd()))
-				client.send_reply(ERR_INVITEONLYCHAN, channel_name + " :Cannot join channel (+i)");
+				client.send_reply(ERR_INVITEONLYCHAN, client.getNickname() + " " + channel_name + " :Cannot join channel (+i)");
 			else if (ch->getUserLimit() > 0 && ch->getMembers().size() >= (size_t)ch->getUserLimit())
-				client.send_reply(ERR_CHANNELISFULL, channel_name + " :Cannot join channel (+l)");
+				client.send_reply(ERR_CHANNELISFULL, client.getNickname() + " " + channel_name + " :Cannot join channel (+l)");
 			else if (!ch->getKey().empty() && ch->getKey() != key)
-				client.send_reply(ERR_BADCHANNELKEY, channel_name + " :Cannot join channel (+k)");
+				client.send_reply(ERR_BADCHANNELKEY, client.getNickname() + " " + channel_name + " :Cannot join channel (+k)");
 			continue ;
 		}
 
@@ -194,9 +194,9 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 
 		// Topic 응답
 		if (ch->getChannelTopic().empty()) {
-			client.send_reply(RPL_NOTOPIC, channel_name + " :No topic is set");
+			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " :No topic is set");
 		} else {
-			client.send_reply(RPL_TOPIC, channel_name + " :" + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + " :" + ch->getChannelTopic());
 		}
 
 		// Names 목록 전송
