@@ -50,6 +50,8 @@ const std::string RPL_INVITING = "341";
 const std::string RPL_CHANNELMODEIS = "324";
 const std::string ERR_UNKNOWNMODE = "472";
 const std::string ERR_KEYSET = "467";
+const std::string RPL_UMODEIS = "221";
+const std::string ERR_USERSDONTMATCH = "502";
 //ping
 const std::string ERR_NOORIGIN = "409";
 const std::string ERR_NOSUCHSERVER = "402";
