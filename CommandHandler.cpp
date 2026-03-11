@@ -195,9 +195,9 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 
 		// Topic 응답
 		if (ch->getChannelTopic().empty()) {
-			client.send_reply(RPL_NOTOPIC, channel_name + " :No topic is set");
+			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " :No topic is set");
 		} else {
-			client.send_reply(RPL_TOPIC, channel_name + " :" + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + " :" + ch->getChannelTopic());
 		}
 
 		// Names 목록 전송
@@ -402,21 +402,21 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+		client.send_reply(ERR_NOSUCHCHANNEL, client.getNickname() + " " + channel_name + " :No such channel");
 		return ;
 	}
 	
 	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+		client.send_reply(ERR_NOTONCHANNEL, client.getNickname() + " " + channel_name + " :You're not on that channel");
 		return ;
 	}
 
 	if (msg.getParams().size() == 1) {
 		std::string topic = ch->getChannelTopic();
 		if (!topic.empty()) {
-			client.send_reply(RPL_TOPIC, channel_name + " :" + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + " :" + ch->getChannelTopic());
 		} else {
-			client.send_reply(RPL_NOTOPIC, channel_name + " :No topic is set");
+			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " :No topic is set");
 		}
 		return ;
 	}
@@ -514,35 +514,52 @@ MODE <channel> *( ("-" / "+" ) *<modes> *<modeparams> )
 // 예시: MODE #42 +kl jechoi 10   (동시 변경 가능)
 void	CommandHandler::handleMode(Client& client, const Message& msg)
 {
+	std::string nick = client.getNickname().empty() ? "*" : client.getNickname();
 	if (!client.is_registered()) {
 		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
 		return;
 	}
-	if (msg.getParams().size() < 2) {
+	if (msg.getParams().size() < 1) {
 		client.send_reply(ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
 		return ;
 	}
 
-	std::string channel_name = msg.getParams()[0];
-	std::string mode = msg.getParams()[1];
+	std::string target = msg.getParams()[0];
 	
-	Channel* ch = server.getChannel(channel_name);
-	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+	// 유저 모드 처리
+	if (target[0] != '#' && target[0] != '&') {
+		if (target == client.getNickname()) {
+			if (msg.getParams().size() == 1) {
+				// 본인 모드 조회 요청 시 모드 없음 응답
+				client.send_reply(RPL_UMODEIS, client.getNickname() + " +");
+				return ;
+			}
+			// irssi 초기 접속 시 MODE <nickname> +i 요청 응답
+			std::string mode_msg = ":" + nick + "!" + client.getUsername() + "@localhost MODE " + nick + " :+i\r\n";
+			client.appendWriteBuffer(mode_msg);
+			return ;
+		}
+		client.send_reply(ERR_USERSDONTMATCH, nick + " :Cannot change mode for other users");
 		return ;
 	}
-	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+
+	Channel* ch = server.getChannel(target);
+	if (!ch) {
+		client.send_reply(ERR_NOSUCHCHANNEL, nick + " " + target + " :No such channel");
 		return ;
 	}
 	if (msg.getParams().size() == 1) {
 		// 현재 모드 출력
-		client.send_reply(RPL_CHANNELMODEIS, channel_name + " " + ch->getMode());
+		client.send_reply(RPL_CHANNELMODEIS, nick + " " + target + " " + ch->getMode());
+		return ;
+	}
+	if (!ch->hasMember(client.getFd())) {
+		client.send_reply(ERR_NOTONCHANNEL, nick + " " + target + " :You're not on that channel");
 		return ;
 	}
 
 	if (!ch->isOperator(client.getFd())) {
-		client.send_reply(ERR_CHANOPRIVSNEEDED, channel_name + " :You're not channel operator");
+		client.send_reply(ERR_CHANOPRIVSNEEDED, nick + " " + target + " :You're not channel operator");
 		return ;
 	}
 	applyMode(client, msg.getParams(), ch);
