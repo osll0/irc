@@ -120,7 +120,7 @@ const std::string	Channel::getMode() const
 			params += " ";
 		params += os.str();
 	}
-	std::string result = modes + " " + params;
+	std::string result = params.empty() ? modes : modes + " " + params;
 	return result;
 }
 
