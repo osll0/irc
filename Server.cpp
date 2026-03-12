@@ -227,6 +227,10 @@ void	Server::run()
 	}
 }
 
+const std::map<std::string, Channel> &Server::getAllChannels() const
+{
+	return channels;
+}
 
 
 // Channel management

@@ -95,13 +95,36 @@ void	CommandHandler::handleNick(Client& client, const Message& msg)
 		return ;
 	}
 
+	bool was_registered = client.is_registered();
+	std::string old_nick = client.getNickname();
+
+	// 이전 nickname 제거
+	if (!old_nick.empty()) {
+		nicknames.erase(old_nick);
+	}
+
 	// 새로운 nickname 설정
 	client.setNickname(new_nick);
 	nicknames[new_nick] = client.getFd();
-	
-	// 등록 완료 확인, reply 보내기
-	if (client.is_registered())
+
+	//등록 처리 완료 및 브로드캐스트
+	if (!was_registered && client.is_registered()) {
+		// 처음으로 등록이 완료된 경우
 		sendWelcome(client);
+	} else if (was_registered) {
+		// 이미 접속한 유저가 닉네임만 바꾼 경우
+		std::string nick_msg = ":" + old_nick + "!" + client.getUsername() + "@localhost NICK :" + new_nick + "\r\n";
+
+		server.sendToClient(client.getFd(), nick_msg);
+
+		//전체 채널을 돌면서, broadcast
+		const std::map<std::string, Channel> &all_channels = server.getAllChannels();
+		for (std::map<std::string, Channel>::const_iterator it = all_channels.begin(); it != all_channels.end(); ++it) {
+			if (it->second.hasMember(client.getFd())) {
+				server.broadcastToChannel(it->first, nick_msg, client.getFd());
+			}
+		}
+	}
 }
 
 void CommandHandler::handleUser(Client& client, const Message& msg)

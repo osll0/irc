@@ -40,6 +40,7 @@ class Server {
 		void	run();
 
 		// Channel management
+		const std::map<std::string, Channel> &getAllChannels() const;
 		Channel* getChannel(const std::string& channel_name);
 		Channel* createChannel(const std::string& channel_name);
 		void	removeChannel(const std::string& channel_name);
