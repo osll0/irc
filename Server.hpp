@@ -48,6 +48,7 @@ class Server {
 		void	enablePollout(int fd);
 		void	sendToClient(int fd, const std::string& message);
 		void	broadcastToChannel(const std::string& channel_name, const std::string& message, int except_fd);
+		void	broadcastToSharedUsers(int sender_fd, const std::string &message);
 
 		Client* getClientByFd(int fd);
 		Client* getClientByNickname(const std::string& nickname);

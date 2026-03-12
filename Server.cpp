@@ -301,6 +301,26 @@ void	Server::broadcastToChannel(const std::string& channel_name, const std::stri
 	}
 }
 
+void	Server::broadcastToSharedUsers(int sender_fd, const std::string &message)
+{
+	std::set<int> target_fds;
+	std::map<std::string, Channel>::iterator it;
+
+	for (it = channels.begin(); it != channels.end(); ++it) {
+		Channel& ch = it->second;
+		if (ch.hasMember(sender_fd)) {
+			const std::set<int> &members = ch.getMembers();
+			target_fds.insert(members.begin(), members.end());
+		}
+	}
+
+	target_fds.erase(sender_fd);
+
+	for (std::set<int>::iterator set_it = target_fds.begin(); set_it != target_fds.end(); ++set_it) {
+		sendToClient(*set_it, message);
+	}
+}
+
 Client* Server::getClientByFd(int fd)
 {
 	std::map<int, Client>::iterator it = clients.find(fd);

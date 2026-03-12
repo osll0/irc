@@ -69,38 +69,51 @@ static bool	is_valid_nick(const std::string& nickname)
 void	CommandHandler::handleNick(Client& client, const Message& msg)
 {
 	if (!client.is_pass_registered()) {
-		client.send_reply(ERR_PASSWDMISMATCH, ":Password required");
+		client.send_reply(ERR_PASSWDMISMATCH, ":Password incorrect");
 		return ;
 	}
-
+	// 파라미터 체크
 	if (msg.getParams().empty()) {
 		client.send_reply(ERR_NONICKNAMEGIVEN, ":No nickname given");
 		return ;
 	}
 
 	std::string new_nick = msg.getParams()[0];
-	if (nicknames.find(new_nick) != nicknames.end()) {
-		client.send_reply(ERR_NICKNAMEINUSE, "* " + new_nick + " :Nickname is already in use");
-		return ;
-	}
-
-	// 이전 nickname 제거 (존재하면)
-	if (!client.getNickname().empty()) {
-		nicknames.erase(client.getNickname());
-	}
-
+	// 닉네임 유효성 체크
 	if (!is_valid_nick(new_nick)) {
 		client.send_reply(ERR_ERRONEUSNICKNAME, new_nick + " :Erroneous nickname");
 		return ;
 	}
 
+	// 중복 체크
+	if (nicknames.find(new_nick) != nicknames.end()) {
+		client.send_reply(ERR_NICKNAMEINUSE, "* " + new_nick + " :Nickname is already in use");
+		return ;
+	}
+
+	std::string old_nick = client.getNickname();
+	bool was_registered = client.is_registered();
+
+	// 이전 nickname 제거 (존재하면)
+	if (!old_nick.empty()) {
+		nicknames.erase(old_nick);
+	}
+
 	// 새로운 nickname 설정
 	client.setNickname(new_nick);
 	nicknames[new_nick] = client.getFd();
-	
-	// 등록 완료 확인, reply 보내기
-	if (client.is_registered())
+
+	if (was_registered) {
+		std::string prefix = ":" + old_nick + "!" + client.getUsername() + "@localhost";
+		std::string nick_msg = prefix + " NICK :" + new_nick + "\r\n";
+
+		//본인 및 모든 유저에게 브로드캐스트
+		server.sendToClient(client.getFd(), nick_msg);
+		server.broadcastToSharedUsers(client.getFd(), nick_msg);
+	} else if (client.is_registered()) {
+		// 등록 된적 없고 방금 NICK 처리로 등록 완료 된 경우
 		sendWelcome(client);
+	}
 }
 
 void CommandHandler::handleUser(Client& client, const Message& msg)
