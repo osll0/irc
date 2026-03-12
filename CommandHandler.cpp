@@ -376,7 +376,20 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 	
 	ch->removeMember(target->getFd());
 	// 채널 비어있으면 채널 제거
-	server.removeChannel(channel_name);
+	if (ch->getMembers().empty()) {
+		server.removeChannel(channel_name);
+	} else {
+		if (ch->getOperators().empty()) {
+			int new_op_fd = *(ch->getMembers().begin());
+			ch->addOperator(new_op_fd);
+
+			Client *new_op = server.getClientByFd(new_op_fd);
+			if (new_op) {
+				std::string mode_msg = ":localhost MODE " + channel_name + " +o " + new_op->getNickname() + "\r\n";
+				server.broadcastToChannel(channel_name, mode_msg, -1);
+			}
+		}
+	}
 }
 
 // TOPIC <channel> [ <topic> ]
