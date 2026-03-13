@@ -3,6 +3,9 @@
 #include <iostream>
 #include <stdlib.h>
 #include <sstream>
+#include <cstdlib>
+#include <climits>
+#include <errno.h>
 
 static std::vector<std::string> split(const std::string &str, char delimiter) {
 	std::vector<std::string> tokens;
@@ -32,13 +35,14 @@ void CommandHandler::sendWelcome(Client& client)
 
 void	CommandHandler::handlePass(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
 	if (client.is_pass_registered()) {
-		client.send_reply(ERR_ALREADYREGISTRED, ":Unauthorized command (already registered)");
+		client.send_reply(ERR_ALREADYREGISTRED, receiver + " :Unauthorized command (already registered)");
 		return ;
 	}
 
 	if (msg.getParams().empty()) {
-		client.send_reply(ERR_NEEDMOREPARAMS, msg.getCommand() + " :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " " + msg.getCommand() + " :Not enough parameters");
 		return ;
 	}
 
@@ -46,7 +50,7 @@ void	CommandHandler::handlePass(Client& client, const Message& msg)
 	if (pass == server.getPassword()) {
 		client.setPassRegistered(true);
 	} else {
-		client.send_reply(ERR_PASSWDMISMATCH, ":Password incorrect");
+		client.send_reply(ERR_PASSWDMISMATCH, receiver + " :Password incorrect");
 	}
 }
 
@@ -68,30 +72,27 @@ static bool	is_valid_nick(const std::string& nickname)
 
 void	CommandHandler::handleNick(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_pass_registered()) {
-		client.send_reply(ERR_PASSWDMISMATCH, ":Password required");
+		client.send_reply(ERR_PASSWDMISMATCH, receiver + " :Password required");
 		return ;
 	}
 	// 파라미터 체크
 	if (msg.getParams().empty()) {
-		client.send_reply(ERR_NONICKNAMEGIVEN, ":No nickname given");
+		client.send_reply(ERR_NONICKNAMEGIVEN, receiver + " :No nickname given");
 		return ;
 	}
 
 	// 중복 체크
 	std::string new_nick = msg.getParams()[0];
 	if (nicknames.find(new_nick) != nicknames.end()) {
-		client.send_reply(ERR_NICKNAMEINUSE, "* " + new_nick + " :Nickname is already in use");
+		client.send_reply(ERR_NICKNAMEINUSE, receiver + " :Nickname is already in use");
 		return ;
 	}
 
-	// 이전 nickname 제거 (존재하면)
-	if (!client.getNickname().empty()) {
-		nicknames.erase(client.getNickname());
-	}
-
 	if (!is_valid_nick(new_nick)) {
-		client.send_reply(ERR_ERRONEUSNICKNAME, new_nick + " :Erroneous nickname");
+		client.send_reply(ERR_ERRONEUSNICKNAME, receiver + " :Erroneous nickname");
 		return ;
 	}
 
@@ -129,21 +130,21 @@ void	CommandHandler::handleNick(Client& client, const Message& msg)
 
 void CommandHandler::handleUser(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_pass_registered()) {
-		client.send_reply(ERR_PASSWDMISMATCH, ":Password required");
+		client.send_reply(ERR_PASSWDMISMATCH, receiver + " :Password required");
 		return ;
 	}
 	// 이미 등록되어있는지
 	if (client.is_registered()) {
-		std::string errmsg = " :Unauthorized command (already registered)";
-		client.send_reply(ERR_ALREADYREGISTRED, errmsg);
+		client.send_reply(ERR_ALREADYREGISTRED, receiver + " :Unauthorized command (already registered)");
 		return ;
 	}
 
 	// 파라미터 개수 확인
 	if (msg.getParams().size() < 4) {
-		std::string errmsg = msg.getCommand() + " :Not enough parameters";
-		client.send_reply(ERR_NEEDMOREPARAMS, errmsg);
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " " + msg.getCommand() + " :Not enough parameters");
 		return ;
 	}
 
@@ -158,15 +159,17 @@ void CommandHandler::handleUser(Client& client, const Message& msg)
 
 void CommandHandler::handleJoin(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return ;
 	}
 
 	// 파라미터 확인
 	// join :로 들어온 경우 빈 문자열로 파싱되므로 에러 조건 추가
 	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "JOIN :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " JOIN :Not enough parameters");
 		return ;
 	}
 
@@ -183,7 +186,7 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 
 		// 채널 이름 검증 (# 또는 &로 시작)
 		if (channel_name.empty() || (channel_name[0] != '#' && channel_name[0] != '&')) {
-			client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+			client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 			continue ;
 		}
 
@@ -199,11 +202,11 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 		// 참가 가능 여부 확인 (mode 확인)
 		if (!ch->canJoin(client.getFd(), key)) {
 			if (ch->is_InviteOnly() && !ch->is_Invited(client.getFd()))
-				client.send_reply(ERR_INVITEONLYCHAN, client.getNickname() + " " + channel_name + " :Cannot join channel (+i)");
+				client.send_reply(ERR_INVITEONLYCHAN, receiver + " " + channel_name + " :Cannot join channel (+i)");
 			else if (ch->getUserLimit() > 0 && ch->getMembers().size() >= (size_t)ch->getUserLimit())
-				client.send_reply(ERR_CHANNELISFULL, client.getNickname() + " " + channel_name + " :Cannot join channel (+l)");
+				client.send_reply(ERR_CHANNELISFULL, receiver + " " + channel_name + " :Cannot join channel (+l)");
 			else if (!ch->getKey().empty() && ch->getKey() != key)
-				client.send_reply(ERR_BADCHANNELKEY, client.getNickname() + " " + channel_name + " :Cannot join channel (+k)");
+				client.send_reply(ERR_BADCHANNELKEY, receiver + " " + channel_name + " :Cannot join channel (+k)");
 			continue ;
 		}
 
@@ -211,16 +214,16 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 		ch->addMember(client.getFd());
 		ch->removeInvite(client.getFd());
 
-		// JOIN 메시지 전송: 본인(sendToClient), 다른 멤버(broadcastToChannel)
+		// JOIN 성공 메시지 전송: 본인(sendToClient), 다른 멤버(broadcastToChannel)
 		std::string join_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost JOIN " + channel_name + "\r\n";
 		server.sendToClient(client.getFd(), join_msg);
 		server.broadcastToChannel(channel_name, join_msg, client.getFd());
 
 		// Topic 응답
 		if (ch->getChannelTopic().empty()) {
-			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " :No topic is set");
+			client.send_reply(RPL_NOTOPIC, receiver + " " + channel_name + " :No topic is set");
 		} else {
-			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + " :" + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, receiver + " " + channel_name + " :" + ch->getChannelTopic());
 		}
 
 		// Names 목록 전송
@@ -239,20 +242,22 @@ void CommandHandler::handleJoin(Client& client, const Message& msg)
 				name_list += member->getNickname();
 			}
 		}
-		client.send_reply(RPL_NAMREPLY, client.getNickname() + " = " + channel_name + " :" + name_list);
-		client.send_reply(RPL_ENDOFNAMES, client.getNickname() + " " + channel_name + " :End of /NAMES list");
+		client.send_reply(RPL_NAMREPLY, receiver + " = " + channel_name + " :" + name_list);
+		client.send_reply(RPL_ENDOFNAMES, receiver + " " + channel_name + " :End of /NAMES list");
 	}
 }
 
 void	CommandHandler::handlePrivmsg(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return ;
 	}
 	// 파라미터 확인
 	if (msg.getParams().size() < 2 || msg.getParams()[1].empty()) {
-		client.send_reply(ERR_NOTEXTTOSEND, ":No text to send");
+		client.send_reply(ERR_NOTEXTTOSEND, receiver + " :No text to send");
 		return ;
 	}
 	std::string target = msg.getParams()[0];
@@ -264,12 +269,12 @@ void	CommandHandler::handlePrivmsg(Client& client, const Message& msg)
 		Channel* ch = server.getChannel(target);
 
 		if (!ch) {
-			client.send_reply(ERR_NOSUCHCHANNEL, target + " :No such channel");
+			client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + target + " :No such channel");
 			return ;
 		}
 		// 채널 멤버인지 확인
 		if (!ch->hasMember(client.getFd())) {
-			client.send_reply(ERR_CANNOTSENDTOCHAN, target + " :Cannot send to channel");
+			client.send_reply(ERR_CANNOTSENDTOCHAN, receiver + " " + target + " :Cannot send to channel");
 			return ;
 		}
 		// 채널의 다른 멤버에게 브로드캐스트
@@ -279,7 +284,7 @@ void	CommandHandler::handlePrivmsg(Client& client, const Message& msg)
 	else {
 		Client* rec = server.getClientByNickname(target);
 		if (!rec) {
-			client.send_reply(ERR_NOSUCHNICK, target + " :No such nick/channel");
+			client.send_reply(ERR_NOSUCHNICK, receiver + " " + target + " :No such nick/channel");
 			return ;
 		}
 		server.sendToClient(rec->getFd(), full_msg);		
@@ -289,12 +294,14 @@ void	CommandHandler::handlePrivmsg(Client& client, const Message& msg)
 // PART <channel> *("," <channel>) [ <Part Message> ]
 void	CommandHandler::handlePart(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return;
 	}
 	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " PART :Not enough parameters");
 		return ;
 	}
 
@@ -312,11 +319,11 @@ void	CommandHandler::handlePart(Client& client, const Message& msg)
 		Channel* ch = server.getChannel(channel_name);
 
 		if (!ch) {
-			client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+			client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 			continue ;
 		}
 		if (!ch->hasMember(client.getFd())) {
-			client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+			client.send_reply(ERR_NOTONCHANNEL, receiver + " " + channel_name + " :You're not on that channel");
 			continue ;
 		} 
 
@@ -348,12 +355,14 @@ void	CommandHandler::handlePart(Client& client, const Message& msg)
 // KICK <channel> *("," <channel> ) <user> *("," <user> ) [<comment>]
 void	CommandHandler::handleKick(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return;
 	}
 	if (msg.getParams().size() < 2) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "PART :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " KICK :Not enough parameters");
 		return ;
 	}
 
@@ -368,28 +377,29 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 	// 채널 존재 확인
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+		client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 		return ;
 	}
 	// 본인이 채널 멤버인지
 	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+		client.send_reply(ERR_NOTONCHANNEL, receiver + " " + channel_name + " :You're not on that channel");
 		return ;
 	}
 	// 본인이 오퍼레이터인지
 	if (!ch->isOperator(client.getFd())) {
-		client.send_reply(ERR_CHANOPRIVSNEEDED, channel_name + " :You're not channel operator");
+		client.send_reply(ERR_CHANOPRIVSNEEDED, receiver + " " + channel_name + " :You're not channel operator");
 		return ;
 	}
 	// 대상 클라이언트 찾기
 	Client* target = server.getClientByNickname(target_nick);
 	if (!target) {
-		client.send_reply(ERR_NOSUCHNICK, target_nick + " :No such nick/channel");
+		client.send_reply(ERR_NOSUCHNICK, receiver + " " + target_nick + " :No such nick/channel");
 		return ;
 	}
 	// 대상이 채널 멤버인지
 	if (!ch->hasMember(target->getFd())) {
-		client.send_reply(ERR_USERNOTINCHANNEL, target_nick + " " + channel_name + " :They aren't on that channel");
+		client.send_reply(ERR_USERNOTINCHANNEL, receiver + " " + target_nick + " " + channel_name + " :They aren't on that channel");
+		return ;
 	}
 	// KICK 메시지 구성
 	std::string kick_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost KICK " + channel_name + " " + target_nick + " :" + reason + "\r\n";
@@ -424,13 +434,15 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 //   - ":another topic" => "another topic"으로 set
 void	CommandHandler::handleTopic(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return;
 	}
 
 	if (msg.getParams().empty() || msg.getParams()[0].empty()) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "TOPIC :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " TOPIC :Not enough parameters");
 		return ;
 	}
 
@@ -438,21 +450,21 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, client.getNickname() + " " + channel_name + " :No such channel");
+		client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 		return ;
 	}
 	
 	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, client.getNickname() + " " + channel_name + " :You're not on that channel");
+		client.send_reply(ERR_NOTONCHANNEL, receiver + " " + channel_name + " :You're not on that channel");
 		return ;
 	}
 
 	if (msg.getParams().size() == 1) {
 		std::string topic = ch->getChannelTopic();
 		if (!topic.empty()) {
-			client.send_reply(RPL_TOPIC, client.getNickname() + " " + channel_name + " :" + ch->getChannelTopic());
+			client.send_reply(RPL_TOPIC, receiver + " " + channel_name + " :" + ch->getChannelTopic());
 		} else {
-			client.send_reply(RPL_NOTOPIC, client.getNickname() + " " + channel_name + " :No topic is set");
+			client.send_reply(RPL_NOTOPIC, receiver + " " + channel_name + " :No topic is set");
 		}
 		return ;
 	}
@@ -461,7 +473,7 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 	if (ch->is_TopicRestricted()) {
 		// +t모드: 관리자만 변경가능
 		if (!ch->isOperator(client.getFd())) {
-			client.send_reply(ERR_CHANOPRIVSNEEDED, channel_name + " :You're not channel operator");
+			client.send_reply(ERR_CHANOPRIVSNEEDED, receiver + " " + channel_name + " :You're not channel operator");
 			return ;
 		}
 	}
@@ -481,13 +493,15 @@ void	CommandHandler::handleTopic(Client& client, const Message& msg)
 //	- 초대하는 유저와 초대받는 유저만 초대에 대한 reply 받음
 void	CommandHandler::handleInvite(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return;
 	}
 
 	if (msg.getParams().size() < 2) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "INVITE :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " INVITE :Not enough parameters");
 		return ;
 	}
 	std::string target_nick = msg.getParams()[0];
@@ -495,31 +509,31 @@ void	CommandHandler::handleInvite(Client& client, const Message& msg)
 
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, channel_name + " :No such channel");
+		client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 		return ;
 	}
 	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, channel_name + " :You're not on that channel");
+		client.send_reply(ERR_NOTONCHANNEL, receiver + " " + channel_name + " :You're not on that channel");
 		return ;
 	}
 	if (ch->is_InviteOnly()) {
 		if (!ch->isOperator(client.getFd())) {
-			client.send_reply(ERR_CHANOPRIVSNEEDED, channel_name + " :You're not channel operator");
+			client.send_reply(ERR_CHANOPRIVSNEEDED, receiver + " " + channel_name + " :You're not channel operator");
 			return ;
 		}
 	}
 
 	Client* target = server.getClientByNickname(target_nick);
 	if (!target) {
-		client.send_reply(ERR_NOSUCHNICK, target_nick + " :No such nick/channel");
+		client.send_reply(ERR_NOSUCHNICK, receiver + " " + target_nick + " :No such nick/channel");
 		return ;
 	}
 	if (ch->hasMember(target->getFd())) {
-		client.send_reply(ERR_USERONCHANNEL, target_nick + " " + channel_name + " :is already on channel");
+		client.send_reply(ERR_USERONCHANNEL, receiver + " " + target_nick + " " + channel_name + " :is already on channel");
 		return ;
 	}
 	ch->addInvite(target->getFd());
-	client.send_reply(RPL_INVITING, channel_name + " " + target_nick);
+	client.send_reply(RPL_INVITING, receiver + " " + channel_name + " " + target_nick);
 	std::string invite_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost INVITE " + target_nick + " " + channel_name + "\r\n";
 	server.sendToClient(target->getFd(), invite_msg);
 }
@@ -550,13 +564,14 @@ MODE <channel> *( ("-" / "+" ) *<modes> *<modeparams> )
 // 예시: MODE #42 +kl jechoi 10   (동시 변경 가능)
 void	CommandHandler::handleMode(Client& client, const Message& msg)
 {
-	std::string nick = client.getNickname().empty() ? "*" : client.getNickname();
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		client.send_reply(ERR_NOTREGISTERED, receiver + " :You have not registered");
 		return;
 	}
 	if (msg.getParams().size() < 1) {
-		client.send_reply(ERR_NEEDMOREPARAMS, "MODE :Not enough parameters");
+		client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE :Not enough parameters");
 		return ;
 	}
 
@@ -567,38 +582,37 @@ void	CommandHandler::handleMode(Client& client, const Message& msg)
 		if (target == client.getNickname()) {
 			if (msg.getParams().size() == 1) {
 				// 본인 모드 조회 요청 시 모드 없음 응답
-				client.send_reply(RPL_UMODEIS, client.getNickname() + " +");
+				client.send_reply(RPL_UMODEIS, receiver + " +");
 				return ;
 			}
 			// irssi 초기 접속 시 MODE <nickname> +i 요청 응답
-			std::string mode_msg = ":" + nick + "!" + client.getUsername() + "@localhost MODE " + nick + " :+i\r\n";
-			client.appendWriteBuffer(mode_msg);
+			client.send_reply(ERR_UMODEUNKNOWNFLAG, receiver + " :Unknown MODE flag");
 			return ;
 		}
-		client.send_reply(ERR_USERSDONTMATCH, nick + " :Cannot change mode for other users");
+		client.send_reply(ERR_USERSDONTMATCH, receiver + " :Cannot change mode for other users");
 		return ;
 	}
 
 	Channel* ch = server.getChannel(target);
 	if (!ch) {
-		client.send_reply(ERR_NOSUCHCHANNEL, nick + " " + target + " :No such channel");
+		client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + target + " :No such channel");
 		return ;
 	}
 	if (msg.getParams().size() == 1) {
 		// 현재 모드 출력
-		client.send_reply(RPL_CHANNELMODEIS, nick + " " + target + " " + ch->getMode());
+		client.send_reply(RPL_CHANNELMODEIS, receiver + " " + target + " " + ch->getMode());
 		return ;
 	}
 	if (!ch->hasMember(client.getFd())) {
-		client.send_reply(ERR_NOTONCHANNEL, nick + " " + target + " :You're not on that channel");
+		client.send_reply(ERR_NOTONCHANNEL, receiver + " " + target + " :You're not on that channel");
 		return ;
 	}
 
 	if (!ch->isOperator(client.getFd())) {
-		client.send_reply(ERR_CHANOPRIVSNEEDED, nick + " " + target + " :You're not channel operator");
+		client.send_reply(ERR_CHANOPRIVSNEEDED, receiver + " " + target + " :You're not channel operator");
 		return ;
 	}
-	applyMode(client, msg.getParams(), ch);
+	applyMode(client, msg.getParams(), ch, receiver);
 }
 
 // i t k o l
@@ -613,12 +627,13 @@ void	CommandHandler::handleMode(Client& client, const Message& msg)
 // 	ERR_USERNOTINCHANNEL: 임명할려는데, 그 target이 채널에 없을 때
 // l
 // 	ERR_NEEDMOREPARAMS : 숫자 인자가 없을 때
-void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& params, Channel* ch)
+void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& params, Channel* ch, const std::string &receiver)
 {
 	std::string	modes = params[1];
 	size_t params_index = 2;
 
 	bool	mode_on = true;
+	char	active_sign = 0;
 	std::string result_modes = "";
 	std::string result_params = "";
 
@@ -627,12 +642,18 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 		if (c == '+') {
 			mode_on = true;
-			result_modes += '+';
+			if (active_sign != '+') {
+				result_modes += '+';
+				active_sign = '+';
+			}
 			continue;
 		}
 		if (c == '-') {
 			mode_on = false;
-			result_modes += '-';
+			if (active_sign != '-') {
+				result_modes += '-';
+				active_sign = '-';
+			}
 			continue;
 		}
 
@@ -664,13 +685,16 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 		} else if (c == 'k') {
 			if (mode_on) {
 				if (params_index < params.size()) {
-					std::string key = params[params_index];
-					ch->setKey(key);
-					++params_index;
-					result_modes += "k";
-					result_params += key + " ";
+					std::string key = params[params_index++];
+					if (!ch->getKey().empty()) {
+						client.send_reply(ERR_KEYSET, receiver + " " + ch->getChannelName() + " :Channel key already set");
+					} else {
+						ch->setKey(key);
+						result_modes += "k";
+						result_params += key + " ";
+					}
 				} else {
-					client.send_reply(ERR_NEEDMOREPARAMS, "MODE +k :Not enough parameters");
+					client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE +k :Not enough parameters");
 				}
 			} else {
 				if (!ch->getKey().empty()) {
@@ -685,37 +709,31 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 				Client* target = server.getClientByNickname(nick);
 				if (!target) {
-					client.send_reply(ERR_NOSUCHNICK, nick + " :No such nick");
+					client.send_reply(ERR_NOSUCHNICK, receiver + " " + nick + " :No such nick");
 					continue;
 				}
 
 				if (!ch->hasMember(target->getFd())) {
-					client.send_reply(ERR_USERNOTINCHANNEL, nick + " " + ch->getChannelName() + " :They aren't on that channel");
+					client.send_reply(ERR_USERNOTINCHANNEL, receiver + " " + nick + " " + ch->getChannelName() + " :They aren't on that channel");
 					continue;
 				}
 
-				if (mode_on) {
-					if (!ch->isOperator(target->getFd())) {
-						ch->addOperator(target->getFd());
-						result_modes += "o";
-						result_params += nick + " ";
-					}
-				} else {
-					if (ch->isOperator(target->getFd())) {
-						ch->removeOperator(target->getFd());
-						result_modes += "o";
-						result_params += nick + " ";
-					}
+				if (mode_on && !ch->isOperator(target->getFd())) {
+					ch->addOperator(target->getFd());
+					result_modes += "o";
+					result_params += nick + " ";
+				} else if (!mode_on && ch->isOperator(target->getFd())) {
+					ch->removeOperator(target->getFd());
+					result_modes += "o";
+					result_params += nick + " ";
 				}
 			} else {
-				client.send_reply(ERR_NEEDMOREPARAMS, "MODE +o/-o :Not enough parameters");
-				continue;
+				client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE " + (mode_on ? "+o" : "-o") + " :Not enough parameters");
 			}
 		} else if (c == 'l') {
 			if (mode_on) {
 				if (params_index < params.size()) {
-					std::string limit_str = params[params_index];
-					++params_index;
+					std::string limit_str = params[params_index++];
 
 					bool valid = true;
 					for (size_t i = 0; i < limit_str.length(); i++) {
@@ -725,7 +743,15 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 						}
 					}
 					if (valid && !limit_str.empty()) {
-						int limit = atoi(limit_str.c_str());
+						errno = 0;
+						long val = std::strtol(limit_str.c_str(), NULL, 10);
+						int limit;
+						if (errno == ERANGE || val > INT_MAX) {
+							limit = INT_MAX;
+						} else {
+							limit = static_cast<int>(val);
+						}
+
 						if (limit > 0 && limit != ch->getUserLimit()) {
 							ch->setUserLimit(limit);
 							result_modes += "l";
@@ -733,24 +759,36 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 						}
 					}
 				} else {
-					client.send_reply(ERR_NEEDMOREPARAMS, "MODE +l :Not enough parameters");
+					client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE +l :Not enough parameters");
+				}
+			} else {
+				if (ch->getUserLimit() > 0) {
+					ch->setUserLimit(0);
+					result_modes += "l";
 				}
 			}
 		} else {
 			std::string unknown_msg;
 			unknown_msg += c;
-			client.send_reply(ERR_UNKNOWNMODE, unknown_msg + " :is unknown mode char to me for " + ch->getChannelName());
+			client.send_reply(ERR_UNKNOWNMODE, receiver + " " + unknown_msg + " :is unknown mode char to me for " + ch->getChannelName());
 		}
+	}
+
+	while (!result_modes.empty() &&
+			(result_modes[result_modes.size() - 1] == '+' || result_modes[result_modes.size() - 1] == '-')) {
+		result_modes.erase(result_modes.size() - 1);
 	}
 
 	// 브로드 캐스트
 	if (!result_modes.empty()) {
 		std::string mode_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost MODE " + ch->getChannelName();
 
+		mode_msg += " " + result_modes;
 		if (!result_params.empty()) {
 			result_params.resize(result_params.size() - 1);
+			mode_msg += " " + result_params;
 		}
-		mode_msg += " " + result_modes + " " + result_params + "\r\n";
+		mode_msg += "\r\n";
 
 		server.sendToClient(client.getFd(), mode_msg);
 		server.broadcastToChannel(ch->getChannelName(), mode_msg, client.getFd());
