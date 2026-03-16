@@ -51,10 +51,7 @@ const std::string ERR_UNKNOWNMODE = "472";
 const std::string ERR_KEYSET = "467";
 //pong
 const std::string ERR_NOORIGIN = "409";
-// ":No origin specified"
 const std::string ERR_NOSUCHSERVER = "402";
-// <server name> :No such server"
-
 
 class CommandHandler {
 	private:

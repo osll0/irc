@@ -672,6 +672,15 @@ void	CommandHandler::handlePing(Client& client, const Message& msg)
 	server.sendToClient(client.getFd(), pong_msg);
 }
 
+void	CommandHandler::handleQuit(Client& client, const Message& msg)
+{
+	(void)msg;
+
+	if (!client.is_registered()) {
+		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		return;
+	}
+}
 
 void	CommandHandler::registerCommands()
 {
@@ -686,6 +695,7 @@ void	CommandHandler::registerCommands()
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
 	commands["PING"] = &CommandHandler::handlePing;
+	commands["QUIT"] = &CommandHandler::handleQuit;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)

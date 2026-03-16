@@ -43,6 +43,7 @@ class Server {
 		Channel* getChannel(const std::string& channel_name);
 		Channel* createChannel(const std::string& channel_name);
 		void	removeChannel(const std::string& channel_name);
+		void	removeClient();
 
 		void	enablePollout(int fd);
 		void	sendToClient(int fd, const std::string& message);
@@ -50,7 +51,8 @@ class Server {
 
 		Client* getClientByFd(int fd);
 		Client* getClientByNickname(const std::string& nickname);
-
+		
+		const std::vector<pollfd> getfds();
 		const std::string& getPassword() const;
 
 

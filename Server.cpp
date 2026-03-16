@@ -332,6 +332,12 @@ void	Server::closeClient(size_t index)
 	std::cout << "Client fd " << client_fd << " closed" << std::endl;
 }
 
+const std::vector<pollfd> Server::getfds()
+{
+	return fds;
+}
+
+
 const std::string& Server::getPassword() const
 {
 	return password;

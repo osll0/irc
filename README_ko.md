@@ -43,6 +43,7 @@ irssi -c localhost -p 6667 -n nickname
 
 ```text
 /connect localhost 6667 mypassword
+/connect localhost 6667 mypassword nickname
 ```
 
 특정 닉네임으로 접속하고 싶다면:
@@ -83,3 +84,18 @@ AI 도구는 다음과 같은 용도로 사용되었습니다:
 - 개발 중 디버깅 및 오류 해결
 - IRC 프로토콜 사양 및 예외 상황 이해
 - 명령어 핸들러 및 메시지 파싱 로직에 대한 코드 리뷰 및 최적화 제안
+
+보완할거
+명령어 예시 정리해두기
+QUIT 로직 수정
+
+irssi에서는 /part를 진행해도 클라이언트에 해당 채널 창이 열려 있으면 "이미 채널에 존재한다."라고 판단해서 서버에 JOIN을 전송하지 않음
+/wc를 입력하면 서버에 PART를 보내게 되는데 내부 동작은 정상적으로 진행됨.
+irssi와 ft_irc 서버간의 호환문제
+
+따라서 ft_irc에서는 /wc를 입력하거나 /part 후 /wc를 진행해주어야 함.
+
+mode +k로 비밀번호 설정시
+/join #general [key]
+
+비밀번호가 틀렸거나 user limit으로 full일 때도 irssi는 창부터 바로 열기 때문에 /wc로 창을 꺼줘야지 기본 화면?으로 전환되면서 에러 메시지를 확인할 수 있음.
