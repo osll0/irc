@@ -19,7 +19,7 @@ const std::string ERR_NEEDMOREPARAMS = "461";
 const std::string ERR_ALREADYREGISTRED = "462";
 const std::string ERR_PASSWDMISMATCH = "464";
 
-// Join 관련 Reply codes
+// Join Reply codes
 const std::string RPL_NAMREPLY = "353";
 const std::string RPL_ENDOFNAMES = "366";
 const std::string ERR_NOSUCHCHANNEL = "403";
@@ -49,6 +49,11 @@ const std::string RPL_INVITING = "341";
 const std::string RPL_CHANNELMODEIS = "324";
 const std::string ERR_UNKNOWNMODE = "472";
 const std::string ERR_KEYSET = "467";
+//pong
+const std::string ERR_NOORIGIN = "409";
+// ":No origin specified"
+const std::string ERR_NOSUCHSERVER = "402";
+// <server name> :No such server"
 
 
 class CommandHandler {
@@ -72,6 +77,8 @@ class CommandHandler {
 		void	handleInvite(Client& client, const Message& msg);
 		void	handleMode(Client& client, const Message& msg);
 		void	applyMode(Client& client, const std::vector<std::string>& params, Channel* ch);
+		void	handlePing(Client& client, const Message& msg);
+		void	handleQuit(Client& client, const Message& msg);
 
 		void	sendWelcome(Client& client);
 

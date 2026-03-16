@@ -31,11 +31,31 @@ make
 
 ### 서버 연결
 
-표준 IRC 클라이언트(예: irssi, WeeChat, HexChat)를 사용하여 연결:
+`irssi`를 사용하여 서버에 접속할 수 있습니다:
 
 ```bash
-nc -C localhost 6667
-nc -C 127.0.0.1 6667
+irssi
+```
+
+그 다음 `irssi` 프롬프트에서 서버에 접속합니다:
+
+irssi -c localhost -p 6667 -n nickname
+
+```text
+/connect localhost 6667 mypassword
+```
+
+특정 닉네임으로 접속하고 싶다면:
+
+```text
+/connect -nick mynick localhost 6667 mypassword
+```
+
+접속 후 채널에 입장하고 채팅을 시작할 수 있습니다:
+
+```text
+/join #general
+hello everyone
 ```
 
 ### 정리

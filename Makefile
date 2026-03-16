@@ -4,18 +4,20 @@ CPP = c++
 CPPFLAGS = -Wall -Wextra -Werror -std=c++98
 
 SRCS = Message.cpp Client.cpp CommandHandler.cpp Server.cpp Channel.cpp main.cpp
-OBJS = $(SRCS:.cpp=.o)
+OBJ_DIR = obj
+OBJS = $(addprefix $(OBJ_DIR)/, $(SRCS:.cpp=.o))
 
 all: $(NAME)
 
 $(NAME): $(OBJS)
-	$(CPP) $(CPPFLAGS) $(OBJS) -o $(NAME)
+	$(CPP) $(CPPFLAGS) $^ -o $@
 
-%.o: %.cpp
+$(OBJ_DIR)/%.o: %.cpp
+	mkdir -p $(OBJ_DIR)
 	$(CPP) $(CPPFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJS)
+	rm -rf $(OBJ_DIR)
 
 fclean: clean
 	rm -f $(NAME)

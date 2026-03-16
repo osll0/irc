@@ -58,13 +58,12 @@ void	CommandHandler::handleNick(Client& client, const Message& msg)
 		client.send_reply(ERR_PASSWDMISMATCH, ":Password required");
 		return ;
 	}
-	// 파라미터 체크
+
 	if (msg.getParams().empty()) {
 		client.send_reply(ERR_NONICKNAMEGIVEN, ":No nickname given");
 		return ;
 	}
 
-	// 중복 체크
 	std::string new_nick = msg.getParams()[0];
 	if (nicknames.find(new_nick) != nicknames.end()) {
 		client.send_reply(ERR_NICKNAMEINUSE, "* " + new_nick + " :Nickname is already in use");
@@ -656,6 +655,23 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	}
 }
 
+// ex) PING :lagtimer
+void	CommandHandler::handlePing(Client& client, const Message& msg)
+{
+	if (!client.is_registered()) {
+		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
+		return;
+	}
+	if (msg.getParams().size() < 1) {
+		client.send_reply(ERR_NOORIGIN, ":No origin specified");
+		return ;
+	}
+
+	std::string token = msg.getParams()[0];
+	std::string pong_msg = "PONG :" + token + "\r\n";
+	server.sendToClient(client.getFd(), pong_msg);
+}
+
 
 void	CommandHandler::registerCommands()
 {
@@ -669,6 +685,7 @@ void	CommandHandler::registerCommands()
 	commands["TOPIC"] = &CommandHandler::handleTopic;
 	commands["INVITE"] = &CommandHandler::handleInvite;
 	commands["MODE"] = &CommandHandler::handleMode;
+	commands["PING"] = &CommandHandler::handlePing;
 }
 
 void CommandHandler::handleCommand(Client& client, const Message& msg)

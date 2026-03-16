@@ -31,11 +31,29 @@ make
 
 ### Connecting to the Server
 
-Use any standard IRC client (e.g., irssi, WeeChat, HexChat) to connect:
+Use `irssi` to connect to the server:
 
 ```bash
-nc -C localhost 6667
-nc -C 127.0.0.1 6667
+irssi
+```
+
+Then connect from the `irssi` prompt:
+
+```text
+/connect localhost 6667 mypassword
+```
+
+If you want to use a specific nickname when connecting:
+
+```text
+/connect -nick mynick localhost 6667 mypassword
+```
+
+After connecting, you can join a channel and start chatting:
+
+```text
+/join #general
+hello everyone
 ```
 
 ### Clean up

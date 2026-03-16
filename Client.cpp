@@ -13,11 +13,9 @@ bool	Client::handle_recv()
 	ssize_t n = ::recv(fd, temp, sizeof(temp), 0);
 
 	if (n > 0) {
-		// read_buffer에 데이터 추가
 		read_buffer.append(temp, n);
 		return true;
 	} else if (n == 0) {
-		// 연결 종료
 		std::cout << "Client fd " << fd << " disconnected" << std::endl;
 		return false;
 	} else {
@@ -64,7 +62,6 @@ bool	Client::extractMessage(std::string& out)
 {
 	size_t pos = read_buffer.find("\r\n");
 	if (pos == std::string::npos) {
-		// 메시지 완성안됨
 		return false;
 	}
 	out = read_buffer.substr(0,pos);

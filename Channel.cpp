@@ -36,7 +36,7 @@ void	Channel::addOperator(int client_fd)
 void	Channel::removeOperator(int client_fd)
 {
 	channel_operators_.erase(client_fd);
-	// 만약 오퍼레이터가 하나도 없다면?
+
 	if (channel_operators_.size() == 0) {
 		std::set<int>::iterator it = channel_members_.begin();
 		addOperator(*it);
@@ -157,10 +157,10 @@ bool	Channel::canJoin(int client_fd, const std::string& provided_key) const
 {
 	if (hasMember(client_fd))
 		return true;
-	// 초대 전용인지
+
 	if (invite_only && !is_Invited(client_fd))
 		return false;
-	// user_limit에 걸리는지
+
 	if (user_limit > 0 && channel_members_.size() >= (size_t)user_limit)
 		return false;
 	if (!key.empty() && provided_key != key)
