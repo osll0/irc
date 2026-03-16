@@ -17,7 +17,8 @@ void	Channel::addMember(int client_fd)
 void	Channel::removeMember(int client_fd)
 {
 	channel_members_.erase(client_fd);
-	channel_operators_.erase(client_fd);
+	if (isOperator(client_fd))
+		removeOperator(client_fd);
 	invite_list.erase(client_fd);
 }
 

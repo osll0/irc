@@ -52,6 +52,7 @@ class Server {
 		Client* getClientByFd(int fd);
 		Client* getClientByNickname(const std::string& nickname);
 		
+		const std::map<std::string, Channel> getChannels();
 		const std::vector<pollfd> getfds();
 		const std::string& getPassword() const;
 

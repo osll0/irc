@@ -227,8 +227,6 @@ void	Server::run()
 	}
 }
 
-
-
 // Channel management
 Channel* Server::getChannel(const std::string& channel_name)
 {
@@ -331,6 +329,12 @@ void	Server::closeClient(size_t index)
 
 	std::cout << "Client fd " << client_fd << " closed" << std::endl;
 }
+
+const std::map<std::string, Channel> Server::getChannels()
+{
+	return channels;
+}
+
 
 const std::vector<pollfd> Server::getfds()
 {

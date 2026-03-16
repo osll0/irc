@@ -672,13 +672,25 @@ void	CommandHandler::handlePing(Client& client, const Message& msg)
 	server.sendToClient(client.getFd(), pong_msg);
 }
 
+// QUIT :nick
+// QUIT :[msg]
 void	CommandHandler::handleQuit(Client& client, const Message& msg)
 {
-	(void)msg;
+	std::string quit_msg = "QUIT :";
+	if (msg.getParams().size() < 1) {
+		quit_msg += client.getNickname();
+	} else {
+		quit_msg += msg.getParams()[0];
+	}
+	std::vector<std::string> joined_channels;
+	const std::map<std::string, Channel> channels = server.getChannels();
 
-	if (!client.is_registered()) {
-		client.send_reply(ERR_NOTREGISTERED, ":You have not registered");
-		return;
+	for (std::map<std::string, Channel>::const_iterator it = channels.begin(); it != channels.end(); ++it) {
+		if (it->second.hasMember(client.getFd()))
+			joined_channels.push_back(it->first);
+	}
+	for (size_t i = 0; i < joined_channels.size(); ++i) {
+		server.broadcastToChannel(joined_channels[i], quit_msg, client.getFd());
 	}
 }
 
