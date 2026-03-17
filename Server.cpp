@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <unistd.h>
 #include <sys/types.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <fcntl.h>
@@ -131,6 +132,13 @@ void	Server::handleNewConnection()
 	}
 
 	if (makeSocketNonblocking(new_fd) == -1) {
+		close(new_fd);
+		return;
+	}
+	
+	int on = 1;
+	if (setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)) < 0) {
+		std::cerr << "setsockopt: " << strerror(errno) << std::endl;
 		close(new_fd);
 		return;
 	}
