@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <fcntl.h>
 #include <csignal>
+#include <netinet/tcp.h>
 
 extern volatile sig_atomic_t g_running;
 
@@ -130,6 +131,10 @@ void	Server::handleNewConnection()
 		return;
 	}
 
+	int opt_val = 1;
+	if (setsockopt(new_fd, IPPROTO_TCP, TCP_NODELAY, &opt_val, sizeof(opt_val)) == -1) {
+		std::cerr << "setsockopt TCP_NODELAY failed: " << strerror(errno) << std::endl;
+	}
 	if (makeSocketNonblocking(new_fd) == -1) {
 		close(new_fd);
 		return;
