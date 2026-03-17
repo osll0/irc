@@ -183,6 +183,10 @@ bool	Server::handleClientEvent(size_t index)
 		}
 	}
 
+	if (!client.hasWriteData() && client.isDisconnecting()) {
+		should_close = true;
+	}
+
 	if (should_close) {
 		closeClient(index);
 		return false;
@@ -193,6 +197,17 @@ bool	Server::handleClientEvent(size_t index)
 void	Server::run()
 {
 	while (g_running) {
+		// for (size_t i = 0; i < fds.size(); ++i) {
+		// 	if (fds[i].fd == listener)
+		// 		continue;
+		//
+		// 	Client &client = clients[fds[i].fd];
+		// 	if (client.hasWriteData()) {	// 보낼 데이터 있는 유저 쓰기 감시 ON
+		// 		fds[i].events |= POLLOUT;
+		// 	} else {	// 보낼 데이터 없는 유저 쓰기 감시 OFF
+		// 		fds[i].events &= ~POLLOUT;
+		// 	}
+		// }
 		std::cout << "Wating for events... (monitoring " << fds.size() << " fds)" << std::endl;
 
 		int poll_count = poll(&fds[0], fds.size(), -1);
@@ -291,6 +306,26 @@ void	Server::broadcastToChannel(const std::string& channel_name, const std::stri
 	}
 }
 
+void	Server::broadcastToSharedUsers(int sender_fd, const std::string &message)
+{
+	std::set<int> target_fds;
+	std::map<std::string, Channel>::iterator it;
+
+	for (it = channels.begin(); it != channels.end(); ++it) {
+		Channel& ch = it->second;
+		if (ch.hasMember(sender_fd)) {
+			const std::set<int> &members = ch.getMembers();
+			target_fds.insert(members.begin(), members.end());
+		}
+	}
+
+	target_fds.erase(sender_fd);
+
+	for (std::set<int>::iterator set_it = target_fds.begin(); set_it != target_fds.end(); ++set_it) {
+		sendToClient(*set_it, message);
+	}
+}
+
 Client* Server::getClientByFd(int fd)
 {
 	std::map<int, Client>::iterator it = clients.find(fd);
@@ -312,6 +347,7 @@ Client* Server::getClientByNickname(const std::string& nickname)
 // 모든 채널을 순회하며 채널을 퇴장함
 // - 다른 유저에게 QUIT 브로드캐스트
 // - 방장인 경우 방장 위임
+// - 모든 채널의 초대 목록에서 제거
 void	Server::quitFromAllChannels(int fd, const std::string &quit_msg)
 {
 	std::vector<std::string> empty_channels;
@@ -319,6 +355,7 @@ void	Server::quitFromAllChannels(int fd, const std::string &quit_msg)
 
 	for (it = channels.begin(); it != channels.end(); ++it) {
 		Channel& ch = it->second;
+		ch.removeInvite(fd);
 		if (ch.hasMember(fd)) {
 			broadcastToChannel(ch.getChannelName(), quit_msg, fd);
 

@@ -1,7 +1,7 @@
 NAME = ircserv
 
 CPP = c++
-CPPFLAGS = -Wall -Wextra -Werror -std=c++98
+CPPFLAGS = -Wall -Wextra -Werror -std=c++98 -g
 
 SRCS = Message.cpp Client.cpp CommandHandler.cpp Server.cpp Channel.cpp main.cpp
 OBJS = $(SRCS:.cpp=.o)

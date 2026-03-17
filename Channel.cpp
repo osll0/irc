@@ -113,12 +113,15 @@ const std::string	Channel::getMode() const
 	}
 	if (user_limit > 0) {
 		modes += "l";
+		if (!params.empty())
+			params += " ";
 		std::ostringstream os;
 		os << user_limit;
 		params += os.str();
 	}
-	std::string result = modes + " " + params;
-	return result;
+	if (!params.empty())
+		return modes + " " + params;
+	return modes;
 }
 
 void	Channel::setTopic(const std::string& topic)
@@ -161,7 +164,9 @@ bool	Channel::canJoin(int client_fd, const std::string& provided_key) const
 	if (hasMember(client_fd))
 		return true;
 	// 초대 전용인지
-	if (invite_only && !is_Invited(client_fd))
+	if (is_Invited(client_fd))
+		return true;
+	if (invite_only)
 		return false;
 	// user_limit에 걸리는지
 	if (user_limit > 0 && channel_members_.size() >= (size_t)user_limit)

@@ -2,9 +2,9 @@
 #include <iostream>
 #include <cerrno>
 
-Client::Client(): fd(-1), pass_registered(false) {}
+Client::Client(): fd(-1), pass_registered(false), is_disconnecting(false) {}
 
-Client::Client(int fd): fd(fd), pass_registered(false) {}
+Client::Client(int fd): fd(fd), pass_registered(false), is_disconnecting(false) {}
 
 
 bool	Client::handle_recv()
@@ -116,6 +116,10 @@ bool				Client::hasWriteData() const
 	return !write_buffer.empty();
 }
 
+bool				Client::isDisconnecting() const
+{
+	return is_disconnecting;
+}
 
 // setter
 void	Client::setFd(int fd)
@@ -141,6 +145,11 @@ void	Client::setRealname(const std::string& realname)
 void	Client::setPassRegistered(bool value)
 {
 	this->pass_registered = value;
+}
+
+void	Client::setDisconnecting(bool value)
+{
+	this->is_disconnecting = value;
 }
 
 void	Client::appendWriteBuffer(const std::string& msg)

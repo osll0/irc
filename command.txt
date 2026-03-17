@@ -1,0 +1,144 @@
+<접속>
+
+PASS
+	중복 인증 확인 (is_pass_registered) -> ERR_PASSWDMISMATCH (464)
+	인자 개수 확인 (getParams().empty()) -> ERR_NEEDMOREPARAMS (461)
+	비밀번호 대조 (server.getPassword()) -> ERR_PASSWDMISMATCH (464)
+		성공 시 client.pass_registered = true
+	
+NICK
+	사전 인증 확인 (is_pass_registered()) -> ERR_PASSWDMISMATCH (464)
+	파라미터 확인 -> ERR_NONICKNAMEGIVEN (431)
+	형식 유효성 검사 (is_valid_nick()) -> ERR_ERRONEUSNICKNAME (432)
+		형식 유효성: 첫 글자 숫자, 하이픈, 언더바 불가, 2자 이상 29자 이하
+	중복 닉네임 확인 -> ERR_NICKNAMEINUSE (431)
+	이름 변경 및 전파
+		신규 유저: 설정 후 맵에 추가
+		기존 유저: 이전 닉네임 기반 메시지 생성, 이전 이름 삭제 후 새 이름 설정, 전파
+	sendWelcome: NICK 설정으로 NICK + USER 완료되었다면 Welcome 전송
+	
+USER
+	사전 인증 확인 (is_pass_registered()) -> ERR_PASSWDMISMATCH (464)
+	중복 등록 체크 (is_registered()) -> ERR_ALREADYREGISTERED (462)
+	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+	정보 매핑: 1번째 인자를 username, 4번째 인자를 realname으로 사용
+	sendWelcome: USER 설정으로 NICK + USER 완료되었다면 Welcome 전송
+	
+------------------------------------------------------------------------------------------------
+
+JOIN		특정 채널 입장하거나, 존재하지 않는 경우 새로운 채널 생성
+	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	인자 분리 (split): 쉼표 split 및 채널 / 키 목록 분리
+ 	채널별 반복 루프:
+ 		이름 유효성: #이나 &로 시작하지 않는 채널명 필터링 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 확보: 기존 채널 찾거나, 없으면 새로 생성(createChannel)
+ 		중복 체크: 이미 채널에 있나면 continue (무시)
+ 		입장 조건 검증 (canJoin)
+ 			+i (초대 전용) -> ERR_INVITEONLYCHAN (473)
+ 			+l (인원 제한) -> ERR_CHANNELISFULL (471)
+ 			+k (비밀번호) -> ERR_BADCHANNELKEY (475)
+ 		입장 처리: 멤버 추가 및 초대 목록에서 제거
+ 		메시지 전송:
+ 			JOIN 알림 (본인 + 채널 전원)
+ 			Topic 안내: -> 있으면 RPL_TOPIC (332), 없으면 RPL_NOTOPIC (331)
+ 			멤버 목록(Names) -> RPL_NAMREPLY (353), RPL_ENDOFNAMES (366)
+ 
+ PRIVMSG	특정 유저 혹은 채널 전체에 메시지 전송
+	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NOTEXTTOSEND (412)
+ 	메시지 패키징: 전송할 전체 문자열 프로토콜 생성
+ 	메시지 대상 판별 (target[0])
+ 		채널 대상
+ 			채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 			멤버 여부 확인 -> ERR_CANNOTSENDTOCHAN (404)		-> 검토 필요
+ 			브로드캐스트: 본인 제외 채널 내 모든 멤버에게 전송
+ 		개인 메시지
+ 			닉네임 검색을 통해 수신자 객체 확보 -> ERR_NOSUCHNICK (401)
+ 			단일 전송
+ 			
+ PART		유저가 특정 채널 나갈 때 사용, 방장일 경우 권한 위임
+ 	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	퇴장 메시지 생성 및 다중 타겟 처리: 쉼표 split으로 다중 퇴장 적용
+ 	채널별 루프
+ 		채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 멤버 여부 확인 -> ERR_NOTONCHANNEL (442)
+ 		퇴장 메시지 생성 및 브로드캐스트 -> 본인 포함 전원에게 브로드캐스트해 클라이언트 화면 동기화
+ 		멤버 제거 및 서버 자원 관리: 퇴장 유저 방장 여부 백업 후 멤버 제거, 남은 멤버 0이면 server.removeChannel()
+ 		방장 위임
+ 			채널에 멤버 남았을 경우, 남은 operator 없으면 방장 위임 후, MODE #채널 +o new_op broadcast
+ 		
+ KICK		operator가 특정 유저를 채널에서 강제 퇴장
+ 	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	권한 및 채널 상태 검증
+ 		채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 멤버 여부 확인 -> ERR_NOTONCHANNEL (442)
+ 		방장 권한 확인 -> ERR_CHANOPRIVSNEEDED (482)
+ 	대상 유효성 및 보안 필터링
+ 		대상 존재 확인 -> ERR_NOSUCHNICK (401)
+ 		본인 강퇴 방지 -> 무시 (return)
+ 		대상 채널 멤버 여무 확인 -> ERR_USERNOTINCHANNEL (441)
+ 	KICK 프로토콜 전파: 강퇴 대상과 채널 내 모든 유저에게 메시지 보내 동기화
+ 	멤버 제거 및 채널 자원 관리
+ 		removeMember()을 호출해 대상 제거
+ 		강퇴 후 채널 남은 인원 0명이라면 server.removeChannel() 호출해 서버 자원 해제
+ 		
+ TOPIC	채널의 주제를 조회하거나 새로운 주제로 변경, 채널 설정(+t)에 따라 권한 검증
+  	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	채널 및 멤버십 검증
+ 		채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 멤버 여부 확인 -> ERR_NOTONCHANNEL (442)
+ 	topic 조회 로직 (인자 1개)
+ 		주제 설정되어있으면 RPL_TOPIC(332), 아니라면 RPL_NOTOPIC(331)
+ 	주제 변경 및 권한 검증
+ 		+t 모드인 경우 방장인지 확인 -> ERR_CHANOPRIVSNEEDED (482)
+ 		주제 업데이트 (setTopic())
+ 	TOPIC 프로토콜 전파
+ 	
+ INVITE	특정 유저를 채널에 초대. +i 일때는 방장만 초대 가능
+  	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	채널 및 초대 권한 검증
+ 		채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 멤버 여부 확인 -> ERR_NOTONCHANNEL (442)
+ 		+i 모드 체크, +i인 경우 방장인지 검사 -> ERR_CHANOPRIVSNEEDED (482)
+ 	대상 유효성 및 상태 검증
+ 		대상 존재 확인 -> ERR_NOSUCHNICK (401)
+ 		중복 입장 확인 -> ERR_USERONCHANNEL (443)
+ 	초대 목록 추가
+ 	발신자에게 초대 성공 메시지 -> RPL_INVITING (341)
+ 	수신자에게 초대 알림
+ 	
+ MODE		방장이 채널의 모드 변경(itkol) 및 모드 확인
+   	등록 확인 (is_registered()) -> ERR_NOTREGISTERED (451)
+ 	파라미터 확인 -> ERR_NEEDMOREPARAMS (461)
+ 	채널 및 멤버십 검증
+ 		채널 존재 확인 -> ERR_NOSUCHCHANNEL (403)
+ 		채널 멤버 여부 확인 -> ERR_NOTONCHANNEL (442)
+ 	모드 조회 및 변경 분기
+ 		인자가 채널명 하나 -> RPL_CHANNELMODEIS (324)
+ 		인자가 더 있다면: 방장 권환 확인 후 applyMode 넘김 -> ERR_CHANOPRIVSNEEDED (482)
+ 	모드 파싱 및 적용(applyMode)
+ 		모드 문자열 한 글자씩 읽으며 +/- 상태 추적
+ 		파라미터가 필요한 모드(k, o, l)는 params_index를 이용해 뒤따라오는 문자열에서 값 가져옴
+ 		각 채널 객체의 setter로 모드 변경
+ 		결과 브로드캐스트
+ 		
+ 	모드 처리 로직
+ 	1. 부호 만났을 때 -> 상태 전환 (mode_on)
+ 	2. 파라미터가 필요 없는 플래그(i, t) -> mode_on에 따라 즉시 적용
+ 	3. 파라미터 필요 플래그(+k, o, l) -> params_index 소비
+ 	4. 성공 결과 수집 -> 브로드캐스트
+ 	
+ PING		서버와 클라이언트 간의 연결 상태 확인
+ 	파라미터 검증: 클라이언트 메시지에 토큰 있는 지 확인 -> ERR_NOORIGIN (409)
+ 	토큰 추출: 첫 파라미터를 응답으로 돌려줄 token으로 저장
+ 	PONG 응답 패키징 및 전송
+ 	
+ QUIT		클라이언트의 자발적 종료 처리. 유저가 속한 모든 채널에 퇴장 전파 및 클라이언트 자원 해제
+ 	퇴장 메시지 생성
+ 	전체 채널 자원 정리
+ 	퇴장 브로드캐스트

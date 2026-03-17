@@ -15,6 +15,7 @@ class Client {
 		std::string username;
 		std::string realname;
 		bool	pass_registered;
+		bool	is_disconnecting;
 
 	public:
 		Client();
@@ -37,6 +38,7 @@ class Client {
 		const std::string&	getUsername() const;
 		const std::string&	getRealname() const;
 		bool				hasWriteData() const;
+		bool				isDisconnecting() const;
 
 		// setter
 		void	setFd(int fd);
@@ -44,6 +46,7 @@ class Client {
 		void	setUsername(const std::string& username);
 		void	setRealname(const std::string& realname);
 		void	setPassRegistered(bool value);
+		void	setDisconnecting(bool value);
 
 		void	appendWriteBuffer(const std::string& msg);
 };
