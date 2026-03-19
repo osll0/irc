@@ -395,6 +395,11 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 		client.send_reply(ERR_NOSUCHNICK, receiver + " " + target_nick + " :No such nick/channel");
 		return ;
 	}
+	// 본인 kick 방지
+	if (client.getFd() == target->getFd()) {
+		std::string notice = ":localhost NOTICE " + client.getNickname() + " :You can't kick yourself for safety. \r\n";
+		return ;
+	}
 	// 대상이 채널 멤버인지
 	if (!ch->hasMember(target->getFd())) {
 		client.send_reply(ERR_USERNOTINCHANNEL, receiver + " " + target_nick + " " + channel_name + " :They aren't on that channel");
