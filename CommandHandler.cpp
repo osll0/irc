@@ -511,15 +511,23 @@ void	CommandHandler::handleInvite(Client& client, const Message& msg)
 	std::string target_nick = msg.getParams()[0];
 	std::string channel_name = msg.getParams()[1];
 
+	Client* target = server.getClientByNickname(target_nick);
+	if (!target) {
+		client.send_reply(ERR_NOSUCHNICK, receiver + " " + target_nick + " :No such nick/channel");
+		return ;
+	}
+
 	Channel* ch = server.getChannel(channel_name);
 	if (!ch) {
 		client.send_reply(ERR_NOSUCHCHANNEL, receiver + " " + channel_name + " :No such channel");
 		return ;
 	}
+
 	if (!ch->hasMember(client.getFd())) {
 		client.send_reply(ERR_NOTONCHANNEL, receiver + " " + channel_name + " :You're not on that channel");
 		return ;
 	}
+
 	if (ch->is_InviteOnly()) {
 		if (!ch->isOperator(client.getFd())) {
 			client.send_reply(ERR_CHANOPRIVSNEEDED, receiver + " " + channel_name + " :You're not channel operator");
@@ -527,18 +535,13 @@ void	CommandHandler::handleInvite(Client& client, const Message& msg)
 		}
 	}
 
-	Client* target = server.getClientByNickname(target_nick);
-	if (!target) {
-		client.send_reply(ERR_NOSUCHNICK, receiver + " " + target_nick + " :No such nick/channel");
-		return ;
-	}
 	if (ch->hasMember(target->getFd())) {
 		client.send_reply(ERR_USERONCHANNEL, receiver + " " + target_nick + " " + channel_name + " :is already on channel");
 		return ;
 	}
 	ch->addInvite(target->getFd());
 	client.send_reply(RPL_INVITING, receiver + " " + channel_name + " " + target_nick);
-	std::string invite_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost INVITE " + target_nick + " " + channel_name + "\r\n";
+	std::string invite_msg = ":" + receiver + "!" + client.getUsername() + "@localhost INVITE " + target_nick + " " + channel_name + "\r\n";
 	server.sendToClient(target->getFd(), invite_msg);
 }
 
@@ -637,7 +640,9 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 	size_t params_index = 2;
 
 	bool	mode_on = true;
-	char	active_sign = 0;
+	char	sign_cur = '+';
+	bool	sign_changed = false;
+
 	std::string result_modes = "";
 	std::string result_params = "";
 
@@ -646,31 +651,29 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 		if (c == '+') {
 			mode_on = true;
-			if (active_sign != '+') {
-				result_modes += '+';
-				active_sign = '+';
-			}
+			sign_cur = '+';
+			sign_changed = true;
 			continue;
 		}
 		if (c == '-') {
 			mode_on = false;
-			if (active_sign != '-') {
-				result_modes += '-';
-				active_sign = '-';
-			}
+			sign_cur = '-';
+			sign_changed = true;
 			continue;
 		}
+
+		bool mode_applied = false;
 
 		if (c == 'i') {
 			if (mode_on) {
 				if (!ch->is_InviteOnly()) {
 					ch->setInviteOnly(true);
-					result_modes += "i";
+					mode_applied = true;
 				}
 			} else {
 				if (ch->is_InviteOnly()) {
 					ch->setInviteOnly(false);
-					result_modes += "i";
+					mode_applied = true;
 				}
 			}
 		} else if (c == 't') {
@@ -678,12 +681,12 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 			if (mode_on) {
 				if (!ch->is_TopicRestricted()) {
 					ch->setTopicRestricted(true);
-					result_modes += "t";
+					mode_applied = true;
 				}
 			} else {
 				if (ch->is_TopicRestricted()) {
 					ch->setTopicRestricted(false);
-					result_modes += "t";
+					mode_applied = true;
 				}
 			}
 		} else if (c == 'k') {
@@ -694,7 +697,7 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 						client.send_reply(ERR_KEYSET, receiver + " " + ch->getChannelName() + " :Channel key already set");
 					} else {
 						ch->setKey(key);
-						result_modes += "k";
+						mode_applied = true;
 						result_params += key + " ";
 					}
 				} else {
@@ -703,7 +706,7 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 			} else {
 				if (!ch->getKey().empty()) {
 					ch->setKey("");
-					result_modes += "k";
+					mode_applied = true;
 				}
 			}
 		} else if (c == 'o') {
@@ -722,17 +725,25 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 					continue;
 				}
 
-				if (mode_on && !ch->isOperator(target->getFd())) {
-					ch->addOperator(target->getFd());
-					result_modes += "o";
-					result_params += nick + " ";
-				} else if (!mode_on && ch->isOperator(target->getFd())) {
-					ch->removeOperator(target->getFd());
-					result_modes += "o";
-					result_params += nick + " ";
+				if (mode_on) {	// +o (권한 부여)
+					if (!ch->isOperator(target->getFd())) {
+						ch->addOperator(target->getFd());
+						mode_applied = true;
+						result_params += nick + " ";
+					}
+				} else {		// -o (권한 박탈)
+					if (client.getFd() == target->getFd()) {
+						continue;
+					}
+					if (ch->isOperator(target->getFd())) {
+						ch->removeOperator(target->getFd());
+						mode_applied = true;
+						result_params += nick + " ";
+					}
 				}
 			} else {
 				client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE " + (mode_on ? "+o" : "-o") + " :Not enough parameters");
+				continue;
 			}
 		} else if (c == 'l') {
 			if (mode_on) {
@@ -758,7 +769,7 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 						if (limit > 0 && limit != ch->getUserLimit()) {
 							ch->setUserLimit(limit);
-							result_modes += "l";
+							mode_applied = true;
 							result_params += limit_str + " ";
 						}
 					}
@@ -768,7 +779,7 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 			} else {
 				if (ch->getUserLimit() > 0) {
 					ch->setUserLimit(0);
-					result_modes += "l";
+					mode_applied = true;
 				}
 			}
 		} else {
@@ -776,18 +787,21 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 			unknown_msg += c;
 			client.send_reply(ERR_UNKNOWNMODE, receiver + " " + unknown_msg + " :is unknown mode char to me for " + ch->getChannelName());
 		}
-	}
 
-	while (!result_modes.empty() &&
-			(result_modes[result_modes.size() - 1] == '+' || result_modes[result_modes.size() - 1] == '-')) {
-		result_modes.erase(result_modes.size() - 1);
+		// mode 성공 적용 시에만 부호와 모드 문자 추가
+		if (mode_applied) {
+			if (sign_changed) {
+				result_modes += sign_cur;
+				sign_changed = false;
+			}
+			result_modes += c;
+		}
 	}
 
 	// 브로드 캐스트
 	if (!result_modes.empty()) {
-		std::string mode_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost MODE " + ch->getChannelName();
+		std::string mode_msg = ":" + receiver + "!" + client.getUsername() + "@localhost MODE " + ch->getChannelName() + " " + result_modes;
 
-		mode_msg += " " + result_modes;
 		if (!result_params.empty()) {
 			result_params.resize(result_params.size() - 1);
 			mode_msg += " " + result_params;
