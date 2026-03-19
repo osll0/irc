@@ -86,11 +86,6 @@ void	CommandHandler::handleNick(Client& client, const Message& msg)
 
 	std::string new_nick = msg.getParams()[0];
 	// 닉네임 유효성 체크
-	if (nicknames.find(new_nick) != nicknames.end()) {
-		client.send_reply(ERR_NICKNAMEINUSE, receiver + " :Nickname is already in use");
-		return ;
-	}
-
 	if (!is_valid_nick(new_nick)) {
 		client.send_reply(ERR_ERRONEUSNICKNAME, receiver + " :Erroneous nickname");
 		return ;
@@ -98,7 +93,7 @@ void	CommandHandler::handleNick(Client& client, const Message& msg)
 
 	// 중복 체크
 	if (nicknames.find(new_nick) != nicknames.end()) {
-		client.send_reply(ERR_NICKNAMEINUSE, "* " + new_nick + " :Nickname is already in use");
+		client.send_reply(ERR_NICKNAMEINUSE, receiver + " :Nickname is already in use");
 		return ;
 	}
 
@@ -397,7 +392,8 @@ void	CommandHandler::handleKick(Client& client, const Message& msg)
 	}
 	// 본인 kick 방지
 	if (client.getFd() == target->getFd()) {
-		std::string notice = ":localhost NOTICE " + client.getNickname() + " :You can't kick yourself for safety. \r\n";
+		std::string notice = ":localhost NOTICE " + channel_name + " " + client.getNickname() + " :You can't kick yourself for safety. \r\n";
+		server.sendToClient(client.getFd(), notice);
 		return ;
 	}
 	// 대상이 채널 멤버인지
@@ -541,7 +537,7 @@ void	CommandHandler::handleInvite(Client& client, const Message& msg)
 	}
 	ch->addInvite(target->getFd());
 	client.send_reply(RPL_INVITING, receiver + " " + channel_name + " " + target_nick);
-	std::string invite_msg = ":" + receiver + "!" + client.getUsername() + "@localhost INVITE " + target_nick + " " + channel_name + "\r\n";
+	std::string invite_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost INVITE " + target_nick + " " + channel_name + "\r\n";
 	server.sendToClient(target->getFd(), invite_msg);
 }
 
@@ -592,8 +588,7 @@ void	CommandHandler::handleMode(Client& client, const Message& msg)
 				client.send_reply(RPL_UMODEIS, receiver + " +");
 				return ;
 			}
-			// irssi 초기 접속 시 MODE <nickname> +i 요청 응답
-			client.send_reply(ERR_UMODEUNKNOWNFLAG, receiver + " :Unknown MODE flag");
+			// irssi 접속 시 MODE <nickname> +i 요청 응답 무시
 			return ;
 		}
 		client.send_reply(ERR_USERSDONTMATCH, receiver + " :Cannot change mode for other users");
@@ -704,9 +699,13 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 					client.send_reply(ERR_NEEDMOREPARAMS, receiver + " MODE +k :Not enough parameters");
 				}
 			} else {
-				if (!ch->getKey().empty()) {
-					ch->setKey("");
-					mode_applied = true;
+				if (params_index < params.size()) {
+					std::string key = params[params_index++];;
+					if (!ch->getKey().empty() && ch->getKey() == key) {
+						ch->setKey("");
+						mode_applied = true;
+						result_params += key + " ";
+					}
 				}
 			}
 		} else if (c == 'o') {
@@ -800,7 +799,7 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 	// 브로드 캐스트
 	if (!result_modes.empty()) {
-		std::string mode_msg = ":" + receiver + "!" + client.getUsername() + "@localhost MODE " + ch->getChannelName() + " " + result_modes;
+		std::string mode_msg = ":" + client.getNickname() + "!" + client.getUsername() + "@localhost MODE " + ch->getChannelName() + " " + result_modes;
 
 		if (!result_params.empty()) {
 			result_params.resize(result_params.size() - 1);
@@ -815,9 +814,11 @@ void	CommandHandler::applyMode(Client& client, const std::vector<std::string>& p
 
 void	CommandHandler::handlePing(Client& client, const Message& msg)
 {
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+
 	// 파라미터가 하나도 없는 경우
 	if (msg.getParams().empty()) {
-		client.send_reply(ERR_NOORIGIN, client.getNickname() + " :No origin specified");
+		client.send_reply(ERR_NOORIGIN, receiver + " :No origin specified");
 		return ;
 	}
 
@@ -855,10 +856,6 @@ void	CommandHandler::handleCap(Client& client, const Message& msg)
 	if (subCommand == "LS") {
 		std::string reply = ":localhost CAP * LS :\r\n";
 		server.sendToClient(client.getFd(), reply);
-	} else if (subCommand == "END") {
-		if (client.is_registered()) {
-			sendWelcome(client);
-		}
 	}
 }
 
@@ -884,13 +881,16 @@ void CommandHandler::handleCommand(Client& client, const Message& msg)
 	if (msg.getCommand().empty())
 		return ;
 
-	std::map<std::string, CommandFunc>::iterator it = commands.find(msg.getCommand());
+	std::string cmd = msg.getCommand();
+	std::string receiver = client.getNickname().empty() ? "*" : client.getNickname();
+	std::map<std::string, CommandFunc>::iterator it = commands.find(cmd);
 
 	if (it != commands.end()) {
 		CommandFunc func = it->second;
 		return (this->*func)(client, msg);
 	}
 
-	std::cout << "Unknown command: " << msg.getCommand() << std::endl;
+	client.send_reply(ERR_UNKNOWNCOMMAND, receiver + " " + cmd + " :Unknown command");
+	std::cout << "Unknown command: " << cmd << std::endl;
 	return ;
 }
